@@ -53,6 +53,44 @@ yot --version
 yotcode --version
 ```
 
+#### 找不到 `yot` 命令？配置 PATH
+
+`pip install` 会把 `yot` / `yotcode` 装到当前 Python 环境的 `Scripts`（Windows）或
+`bin`（macOS/Linux）目录。如果这个目录不在 PATH，直接敲 `yot` 会提示"不是内部或
+外部命令"。用下面任一方式解决：
+
+```bash
+# 方式 1：让程序自动把命令目录写入"用户级 PATH"（推荐，一次即可）
+python -m yotcode --setup-path
+# 或：yot --setup-path（前提是 yot 已经能运行）
+
+# 方式 2：一键安装脚本（安装 + PATH + 生成模板，全帮你做）
+python install.py
+# 已经 pip 装过、只想配 PATH：python install.py --path-only
+```
+
+`--setup-path` 会修改**用户级** PATH（Windows 写入注册表 HKCU，macOS/Linux 追加到
+shell 启动文件），**不需要管理员权限**，也**不会改动系统级 PATH**。执行后需要
+**重新打开终端**才会生效。
+
+> 如果你不想改 PATH，也可以直接用 `python -m yotcode` 来运行，效果完全一样：
+> `python -m yotcode --version`、`python -m yotcode --model deepseek-chat`。
+
+#### 首次运行：自动生成配置模板
+
+第一次运行 `yot`（或执行 `python -m yotcode --setup`）时，程序会自动在全局配置目录
+创建两个**带完整注释的模板文件**：
+
+- `~/.yotcode/.env` —— 所有环境变量，全部注释掉
+- `~/.yotcode/settings.json` —— 所有配置参数，全部注释掉
+
+你只要把想用的那一行前面的 `#`（或 `//`）删掉、填上自己的值即可，不用从零记格式。
+已存在的文件**绝不会被覆盖**。想随时查看这份指引：
+
+```bash
+python -m yotcode --setup
+```
+
 以后升级到最新版本：
 
 ```bash
@@ -167,6 +205,37 @@ DEEPSEEK_API_KEY=sk-示例0000000000000000000000000000
 > **两类 Key 不要混用**：`ANTHROPIC_API_KEY` 只服务于 anthropic 类；各家专用 Key
 > （`DEEPSEEK_API_KEY` 等）只服务于 openai 类。若两类 Key 同时存在，程序默认选
 > anthropic，此时想走 openai 类请显式加 `--provider openai`。
+
+#### 为什么 B 类示例有 `baseUrl`，A 类却没有？
+
+因为两类对地址的需求不同：
+
+- **`anthropic` 类**：官方接口地址是固定的 `https://api.anthropic.com`，程序已经内置为
+  默认值。所以上面的 A 类示例**不需要写 `baseUrl`**，只填 Key 就能用。
+  只有当你用**自建的 Anthropic 兼容网关 / 代理**时，才需要配置 `baseUrl`：
+
+  ```jsonc
+  {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5",
+    "providers": {
+      "anthropic": { "baseUrl": "https://你的网关地址/v1" }
+    }
+  }
+  ```
+  或环境变量 `ANTHROPIC_BASE_URL=https://你的网关地址/v1`。
+
+- **`openai` 类**：这类接口由很多不同厂商提供，地址各不相同。好消息是——用各家专用
+  Key（`DEEPSEEK_API_KEY` / `DASHSCOPE_API_KEY` 等）时，程序会**自动识别**对应的
+  `baseUrl`，所以也可以不写。但如果你用**通用 Key**（`OPENAI_API_KEY` / `CCPY_API_KEY`）
+  或**自建服务**（Ollama / vLLM / 网关），就必须显式给出 `baseUrl`，否则不知道往哪发请求。
+
+  地址也可以放 `.env`：`OPENAI_BASE_URL=https://api.deepseek.com/v1`，
+  或命令行 `--base-url https://api.deepseek.com/v1`。
+
+一句话总结：**anthropic 默认地址固定、基本不用填；openai 视情况，专用 Key 自动识别、
+通用 Key / 自建服务必须填**。两类的 `baseUrl` 都能写在 `settings.json` 的
+`providers.<类别>.baseUrl` 里，也能用环境变量，效果等价。
 
 ### 第 1 步：准备 API Key
 
@@ -441,7 +510,112 @@ mkdir -p .yotcode
 cp examples/settings.deepseek.json .yotcode/settings.json
 ```
 
-`examples/` 提供 DeepSeek、OpenAI、通义千问、Ollama 的配置示例。
+`examples/` 提供 DeepSeek、OpenAI、通义千问、Ollama 的配置示例，以及两个"全参数带注释"
+的参考模板：`.env.full.example`（项目根目录）和 `examples/settings.full.example.json`。
+
+### 全注释模板（首次运行自动生成，想用哪个就取消注释）
+
+首次运行 `yot` 时会在 `~/.yotcode/` 自动生成下面两个文件（已存在则不覆盖）。
+所有项都注释着，用户想用哪个就删掉行首的注释符号。#/.env 用 `#`，settings.json 用 `//`。
+
+**`~/.yotcode/.env`（全注释示例）**
+
+```bash
+# ---- A 类：Anthropic 官方 API（provider = anthropic）----
+# ANTHROPIC_API_KEY=sk-ant-你的密钥
+# ANTHROPIC_BASE_URL=https://api.anthropic.com        # 自建网关才需要
+# ANTHROPIC_AUTH_TOKEN=你的授权令牌
+
+# ---- B 类：OpenAI 兼容接口（provider = openai）----
+# OPENAI_API_KEY=sk-你的密钥
+# OPENAI_BASE_URL=https://api.openai.com/v1           # 通用 Key / 自建服务才需要
+# DEEPSEEK_API_KEY=sk-你的密钥                        # 自动识别 baseUrl
+# DASHSCOPE_API_KEY=sk-你的密钥                       # 通义千问，自动识别
+# MOONSHOT_API_KEY=sk-你的密钥                        # Kimi，自动识别
+# ZHIPUAI_API_KEY=你的密钥                            # 智谱 GLM，自动识别
+# CCPY_API_KEY=sk-你的密钥                            # 通用 openai key（旧名）
+
+# ---- 模型 / 供应商 / shell ----
+# CCPY_MODEL=claude-sonnet-4-5
+# CCPY_PROVIDER=anthropic                             # 或 openai
+# CCPY_SHELL=bash
+
+# ---- 联网搜索 ----
+# BRAVE_API_KEY=你的密钥
+# TAVILY_API_KEY=你的密钥
+
+# ---- YotCode 高级选项 ----
+# YOTCODE_HOME=~/.yotcode
+# YOTCODE_SHELL=bash
+# YOTCODE_FONT_SIZE=14
+# YOTCODE_API_LOG=~/.yotcode/logs/api.log
+```
+
+**`~/.yotcode/settings.json`（全注释示例，支持 JSONC）**
+
+```jsonc
+{
+  // ---- 模型与供应商（provider 只有 anthropic / openai 两类）----
+  // "provider": "anthropic",
+  // "provider": "openai",
+  // "model": "claude-sonnet-4-5",
+  // "model": "deepseek-chat",
+  // "smallModel": "claude-sonnet-4-5",
+  // "maxTokens": 8192,
+  // "maxTurns": 60,
+  // "temperature": 0.7,
+
+  // ---- API 地址：anthropic 默认固定；openai 专用 Key 自动识别 ----
+  // "providers": {
+  //   "anthropic": { "baseUrl": "https://api.anthropic.com" },
+  //   "openai":    { "baseUrl": "https://api.deepseek.com/v1" }
+  // },
+
+  // ---- 行为开关 ----
+  // "permissionMode": "default",
+  // "autoCompact": true,
+  // "compactThreshold": 0.82,
+  // "thinking": true,
+  // "autoApproveEdits": false,
+  // "shell": "bash",
+  // "theme": "yotcode",
+  // "systemPromptAppend": "",
+
+  // ---- 权限规则 ----
+  // "permissions": {
+  //   "allow": ["Bash(npm test:*)", "Read(./src/**)"],
+  //   "ask":   ["Bash(git push:*)"],
+  //   "deny":  ["Read(./.env)"],
+  //   "additionalDirectories": ["../shared-lib"]
+  // },
+
+  // ---- 钩子 / MCP / 联网搜索 ----
+  // "hooks": {
+  //   "PreToolUse": [
+  //     { "matcher": "Bash", "command": "python .yotcode/check_command.py" }
+  //   ]
+  // },
+  // "mcpServers": {
+  //   "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "."] }
+  // },
+  // "webSearch": { "provider": "brave" },
+
+  // ---- 环境变量（可放 Key，但别提交 Git）----
+  // "env": { "DEEPSEEK_API_KEY": "sk-示例0000000000000000000000000000" },
+
+  // ---- 界面细节 ----
+  // "ui": {
+  //   "showTips": true,
+  //   "showThinking": true,
+  //   "compactOutput": false,
+  //   "checkpoints": true,
+  //   "fontSize": 14
+  // }
+}
+```
+
+> 提示：全注释的 `settings.json` 是合法的（程序会剥离 `//` 注释后按 JSON 解析，
+> 结果相当于空配置 `{}`），所以首次生成后即使什么都不改，程序也能正常启动。
 
 ### 第 5 步：验证与临时切换
 
@@ -467,6 +641,8 @@ yot --continue                # 继续最近的会话
 yot --resume <session-id>     # 恢复指定会话
 yot --permission-mode acceptEdits
 yot --mock                    # 离线演示，无需 Key
+yot --setup-path              # 把命令目录加入用户 PATH（解决"找不到命令"）
+yot --setup                   # 打印首次配置指引 + 生成全注释模板
 yot --version
 ```
 
@@ -545,8 +721,9 @@ python scripts/ui_interactions.py
 ```
 yotcode/
   agent.py        agent 循环：流式、工具、权限、压缩、子代理
-  cli.py          命令行入口 + 无头运行
+  cli.py          命令行入口 + 无头运行（含 --setup-path / --setup）
   config.py       配置合并、凭据、模型/provider 解析
+  setup.py        首次运行模板生成 + PATH 配置逻辑
   permissions.py  允许/询问/拒绝规则引擎
   session.py      JSONL 持久化、恢复、导出
   types.py        消息/块数据模型
@@ -560,8 +737,10 @@ yotcode/
   providers/      anthropic.py · openai_compat.py · mock.py
   tools/          文件 / shell / web / 交互 / 编排工具与 MCP
   ui/             TUI：app.py · modals.py · widgets.py · render.py · theme.tcss
+install.py        跨平台一键安装脚本（安装 + PATH + 生成模板）
 tests/            pytest 测试（离线，无需 API Key）
-examples/         DeepSeek / OpenAI / 通义千问 / Ollama 配置示例
+examples/         DeepSeek / OpenAI / 通义千问 / Ollama 配置示例 + settings.full.example.json
+.env.full.example 全量环境变量模板（首次运行自动生成的同款）
 docs/             使用手册.md · 代码导读.md
 scripts/          冒烟测试脚本
 ```

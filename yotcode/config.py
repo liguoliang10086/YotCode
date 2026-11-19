@@ -350,6 +350,14 @@ class Config:
                 path.mkdir(parents=True, exist_ok=True)
             except OSError:
                 pass
+        # 首次运行时在用户目录生成全注释的 .env / settings.json 模板，
+        # 用户想启用哪个参数就取消哪行注释。已存在的文件绝不覆盖。
+        # 延迟导入以避免 setup.py <-> config.py 循环导入。
+        try:
+            from .setup import ensure_user_templates
+            ensure_user_templates()
+        except Exception:
+            pass
 
     def describe(self) -> str:
         return (

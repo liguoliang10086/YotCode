@@ -404,6 +404,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--debug", action="store_true", help="Show tracebacks for tool errors."
     )
     parser.add_argument(
+        "--setup-path",
+        action="store_true",
+        help="Add the directory containing yot/yotcode to your user PATH and exit.",
+    )
+    parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Show first-run setup help: config templates and PATH instructions.",
+    )
+    parser.add_argument(
         "--version", action="version", version=f"yot {__version__}"
     )
     return parser
@@ -503,6 +513,46 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)  # 解析用户实际输入的参数
     cwd = Path.cwd()  # 当前工作目录（也就是项目根目录）
     prompt_text = " ".join(args.prompt).strip()  # 位置参数拼成一句话
+
+    # --setup-path：把命令所在目录加入用户 PATH，然后退出。
+    # pip 安装后若直接敲 yot 提示"找不到命令"，运行一次这个即可。
+    if args.setup_path:
+        from .setup import setup_path
+        changed, message, directory = setup_path()
+        err_console.print(f"命令目录：{directory}", style="bold")
+        err_console.print(message, style="green" if changed else "yellow")
+        if changed:
+            err_console.print(
+                "提示：已经打开的终端需要重新打开才会看到新 PATH。", style="dim"
+            )
+        return 0
+
+    # --setup：打印首次配置指引（模板位置 + PATH 用法），然后退出。
+    if args.setup:
+        from .config import home_dir
+        from .setup import ENV_TEMPLATE, SETTINGS_TEMPLATE, ensure_user_templates
+        created = ensure_user_templates()
+        home = home_dir()
+        err_console.print("YotCode 首次配置指引", style="bold")
+        err_console.print(f"全局配置目录：{home}", style="cyan")
+        for path in created:
+            err_console.print(f"  已生成模板：{path}", style="green")
+        if not created:
+            err_console.print("  配置文件已存在，未做任何改动。", style="dim")
+        err_console.print(
+            f"\n环境变量：编辑 {home / '.env'}（取消注释需要的行）", style="dim"
+        )
+        err_console.print(
+            f"全局设置：编辑 {home / 'settings.json'}（支持 // 注释）", style="dim"
+        )
+        err_console.print(
+            "\n若终端找不到 yot 命令，先运行：yot --setup-path", style="dim"
+        )
+        err_console.print("\n模板内容预览（.env）：", style="bold")
+        err_console.print(ENV_TEMPLATE, style="dim")
+        err_console.print("模板内容预览（settings.json）：", style="bold")
+        err_console.print(SETTINGS_TEMPLATE, style="dim")
+        return 0
 
     # 老版本（claudepy）的配置目录自动搬到新名字（yotcode）。
     # 必须放在读配置之前，否则老的 settings.json 根本找不到。

@@ -1,0 +1,72 @@
+{
+  // ==========================================================================
+  // YotCode 全量配置模板（项目内参考副本）——支持 // 与 /* */ 注释
+  // 首次运行会自动在 ~/.yotcode/settings.json 生成同样内容。
+  // 所有字段默认注释；想启用哪个就删掉它前面的 // 并改值。
+  // 没写的字段用内置默认值。项目级配置放 <项目>/.yotcode/settings.json。
+  // ==========================================================================
+
+  // ---- 模型与供应商（provider 只有 anthropic / openai 两类）---------------
+  // "provider": "anthropic",
+  // "provider": "openai",
+  // "model": "claude-sonnet-4-5",
+  // "model": "deepseek-chat",
+  // "smallModel": "claude-sonnet-4-5",
+  // "maxTokens": 8192,
+  // "maxTurns": 60,
+  // "temperature": 0.7,
+
+  // ---- API 地址（Key 放 .env，这里只放 baseUrl）---------------------------
+  // anthropic 默认 https://api.anthropic.com，通常不用填。
+  // openai 各家地址多数由 *_API_KEY 自动识别；自建/Ollama 才需手填：
+  // "providers": {
+  //   "anthropic": { "baseUrl": "https://api.anthropic.com" },
+  //   "openai":    { "baseUrl": "https://api.deepseek.com/v1" }
+  // },
+
+  // ---- 行为开关 ------------------------------------------------------------
+  // "permissionMode": "default",
+  // "autoCompact": true,
+  // "compactThreshold": 0.82,
+  // "thinking": true,
+  // "autoApproveEdits": false,
+  // "shell": "bash",
+  // "theme": "yotcode",
+  // "systemPromptAppend": "",
+
+  // ---- 权限规则（列表与项目级合并，全局 deny 不会被清掉）------------------
+  // "permissions": {
+  //   "allow": ["Bash(npm test:*)", "Read(./src/**)"],
+  //   "ask":   ["Bash(git push:*)"],
+  //   "deny":  ["Read(./.env)"],
+  //   "additionalDirectories": ["../shared-lib"]
+  // },
+
+  // ---- 钩子 / MCP / 联网搜索 ----------------------------------------------
+  // "hooks": {
+  //   "PreToolUse": [
+  //     { "matcher": "Bash", "command": "python .yotcode/check_command.py" }
+  //   ]
+  // },
+  // "mcpServers": {
+  //   "filesystem": {
+  //     "command": "npx",
+  //     "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+  //   }
+  // },
+  // "webSearch": { "provider": "brave" },
+
+  // ---- 环境变量（可放 Key，但别提交 Git）----------------------------------
+  // "env": {
+  //   "DEEPSEEK_API_KEY": "sk-示例0000000000000000000000000000"
+  // },
+
+  // ---- 界面细节 ------------------------------------------------------------
+  // "ui": {
+  //   "showTips": true,
+  //   "showThinking": true,
+  //   "compactOutput": false,
+  //   "checkpoints": true,
+  //   "fontSize": 14
+  // }
+}
