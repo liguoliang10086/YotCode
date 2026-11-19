@@ -1,0 +1,16 @@
+{
+  // 放到项目的 .yotcode/settings.json 即可生效。
+  // API Key 建议写在项目根目录的 .env 里：DEEPSEEK_API_KEY=sk-...
+  // 如果同时配置了 ANTHROPIC_API_KEY，请保留 "provider": "openai"。
+  "model": "deepseek-chat",
+  "provider": "openai",
+  "maxTokens": 8192,
+  "maxTurns": 60,
+  "autoCompact": true,
+  "thinking": true,
+  "providers": {
+    "openai": {
+      "baseUrl": "https://api.deepseek.com/v1"
+    }
+  }
+}

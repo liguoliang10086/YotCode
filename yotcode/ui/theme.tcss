@@ -1,0 +1,505 @@
+/* ═══════════════════════════════════════════════════════════════════
+   YotCode — “Terminal Noir” 主题
+   参考 Claude Code：暖炭背景、圆角面板、渐变标题、细线分层、
+   陶土橙强调色。终端无法改字号，用更紧的留白与更少的粗体让界面变轻。
+   ═══════════════════════════════════════════════════════════════════ */
+Screen {
+    background: #1e1d1b;
+    color: #e8e6e3;
+}
+
+Markdown {
+    background: transparent;
+}
+
+/* 标题收小：去掉 H2 以下的粗体、收紧上下留白，让正文更轻更小 */
+MarkdownHeader {
+    margin: 0;
+    color: #e8e6e3;
+}
+MarkdownH1 {
+    content-align: left middle;
+    color: #f5f2ed;
+    text-style: bold;
+}
+MarkdownH2 {
+    color: #f5f2ed;
+    text-style: none;
+}
+MarkdownH3,
+MarkdownH4,
+MarkdownH5,
+MarkdownH6 {
+    color: #a8a59f;
+    text-style: none;
+}
+MarkdownBullet {
+    color: #d97757;
+}
+MarkdownBlockQuote {
+    color: #a8a59f;
+}
+MarkdownLink {
+    color: #79b8ff;
+}
+
+/* ── transcript：左侧一条时间线，消息不用卡片 ────────────────────── */
+#transcript {
+    height: 1fr;
+    padding: 1 2 0 1;
+    border-left: solid #1e1d1b;
+    scrollbar-size: 1 1;
+    scrollbar-color: #454340;
+    scrollbar-background: #1e1d1b;
+}
+#transcript.has-messages {
+    border-left: solid #3a3835;
+}
+
+/* 欢迎区：上留一行空隙，保证 Logo 完整可见、不贴窗口顶边 */
+.welcome {
+    height: auto;
+    background: transparent;
+    padding: 0 0 0 1;
+    margin: 1 0 1 0;
+}
+
+/* 用户 / 助手消息共用的“行首符号 + 正文”排布（行距收紧，视觉更小） */
+.user-message,
+.assistant-message {
+    height: auto;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    align-vertical: top;
+    border: none;
+}
+.assistant-message {
+    margin-bottom: 0;
+}
+.msg-bullet {
+    width: 2;
+    height: 1;
+    text-style: none;
+}
+/* 用户输入：Claude 陶土橙的右尖括号 */
+.user-bullet {
+    color: #d97757;
+}
+/* 助手回答：实心圆点，对应 Claude Code 的 ⏺ */
+.assistant-bullet {
+    color: #8db78d;
+}
+.user-text {
+    width: 1fr;
+    height: auto;
+    color: #a8a59f;   /* 柔和灰：视觉更轻，与助手正文区分层级 */
+}
+.assistant-md {
+    width: 1fr;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+}
+
+/* 思考指示器：出现在用户消息正下方的 `◐ Thinking 3s` 一行，整行灰色弱化 */
+.thinking-indicator {
+    height: 1;
+    background: transparent;
+    padding: 0 0 0 2;
+    margin: 0 0 1 0;
+    color: #8a8a85;
+}
+
+/* 思考区：默认折叠，展开后是一条很淡的左侧引导线 */
+.thinking-panel {
+    height: auto;
+    background: transparent;
+    border-top: none;
+    padding: 0 0 0 1;
+    margin: 0 0 1 0;
+}
+.thinking-panel CollapsibleTitle {
+    height: 1;
+    padding: 0;
+    color: #5f5e5b;
+    background: transparent;
+    text-style: italic;
+}
+.thinking-panel CollapsibleTitle:hover {
+    background: transparent;
+    color: #a8a59f;
+}
+.thinking-body {
+    height: auto;
+    padding: 0 0 0 2;
+    border-left: solid #4d4b48;
+    background: transparent;
+    color: #8a8a85;
+}
+
+/* ── 工具调用：└ Name arg ✓ 0.4s，输出用 ⎿ 缩进 ─────────────────── */
+.tool-card {
+    height: auto;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+}
+.tool-header {
+    height: 1;
+    align-vertical: middle;
+    padding: 0;
+}
+.tool-header:hover {
+    background: #2a2927;
+}
+.tool-mark {
+    width: 2;
+    color: #5f5e5b;
+}
+.tool-name {
+    width: auto;
+    height: 1;
+}
+.tool-arg {
+    width: 1fr;
+    height: 1;
+    color: #a8a59f;
+    padding-left: 1;
+}
+.tool-status {
+    width: auto;
+    height: 1;
+    padding-left: 1;
+    color: #5f5e5b;
+}
+.tool-status.running {
+    color: #e3b341;
+}
+.tool-status.waiting {
+    color: #56d4dd;
+}
+.tool-status.error {
+    color: #ff7b72;
+}
+.tool-duration {
+    width: auto;
+    height: 1;
+    color: #5f5e5b;
+    padding-left: 1;
+}
+.tool-body {
+    height: auto;
+    padding: 0 0 0 2;
+}
+.tool-footer {
+    height: auto;
+    padding-left: 4;
+    color: #5f5e5b;
+}
+
+/* ── 信息卡 / 通知：信息卡只留一条很细的左侧轨 ───────────────────── */
+.info-panel {
+    height: auto;
+    background: transparent;
+    border-left: solid #4d4b48;
+    padding: 0 0 0 1;
+    margin: 0 0 1 0;
+}
+.notice-panel {
+    height: auto;
+    background: transparent;
+    padding: 0 0 0 2;
+    margin: 0 0 1 0;
+}
+
+/* ── todos：贴着输入区上方的一条任务带 ───────────────────────────── */
+.todo-panel {
+    height: auto;
+    max-height: 10;
+    margin: 0 2;
+    padding: 0 1;
+    background: #0e0e12;
+    border-top: solid #3a3835;
+    border-bottom: solid #3a3835;
+}
+
+/* ── prompt：细边框输入框 + 模式前缀 + 右侧发送按钮 ───────────────── */
+#prompt-area {
+    height: auto;
+    margin: 1 2 0 2;
+    background: transparent;
+    padding: 0;
+}
+#prompt-row {
+    height: auto;
+    background: #262523;
+    border: round #4d4b48;
+    padding: 0 1;
+}
+#prompt-row:focus-within {
+    border: round #8f4f38;
+    background: #2a2927;
+}
+#prompt-chevron {
+    width: 3;
+    height: 1;
+    padding: 0 0 0 1;
+    color: #d97757;
+}
+#send-hint {
+    width: 3;
+    height: 1;
+    color: #8f4f38;
+    content-align: center middle;
+}
+/* 不再用 :hover 变色：鼠标停在底栏发送按钮上时，conhost 会把 hover 重绘
+   写进屏幕缓冲区最后一行，造成整屏上滚、底部出现重复行（看起来像“重发”）。
+   发送按钮保持静态高亮，既能看清又不会因鼠标移动触发重绘。 */
+#completions {
+    display: none;
+    height: auto;
+    max-height: 8;
+    border: round #4d4b48;
+    background: #2a2927;
+    margin: 0 0 1 0;
+    padding: 0;
+}
+#completions > .option-list--option {
+    padding: 0 1;
+}
+#completions > .option-list--option-highlighted {
+    background: #3a2a22;
+    color: #f5f2ed;
+}
+/* TextArea 无自身边框，透明融入容器，避免双层框 */
+#prompt {
+    width: 1fr;
+    height: 1;
+    min-height: 1;
+    max-height: 10;
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: #e8e6e3;
+}
+/* 光标：陶土橙 */
+#prompt .text-area--cursor {
+    background: #d97757;
+    color: #1e1d1b;
+}
+
+/* ── status bar：单行底栏，整行由 Python 一次性写入 ─────────────────
+   注意：#status-left / #status-right 是旧版结构，Python 早已不再挂载这两个
+   子控件。残留的 CSS 会让维护者误以为状态栏是两段式，也可能在旧 .pyc 被
+   误加载时造成“多行状态栏”的错觉，这里彻底移除。                       */
+#status {
+    height: 1;
+    background: #1e1d1b;
+    padding: 0 2;
+    border-top: none;
+    text-wrap: nowrap;
+    overflow: hidden;
+}
+/* 物理末行守卫：占位一行空白，status / 输入框不写到 conhost 缓冲区末行，
+   避免 wrap-pending 触发整屏上滚留下残影。背景与页面一致，肉眼不可见。 */
+#bottom-guard {
+    height: 2;
+    background: #1e1d1b;
+}
+
+/* ── modals ─────────────────────────────────────────────────────────── */
+PermissionScreen,
+ModelPickerScreen,
+SessionPickerScreen,
+HelpScreen,
+QuestionScreen,
+CommandPaletteScreen {
+    align: center middle;
+    background: #000000 75%;
+}
+
+#dialog {
+    width: 84%;
+    max-width: 108;
+    height: auto;
+    max-height: 88%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: #262523;
+    border: round #4d4b48;
+    padding: 1 2;
+}
+.dialog-title {
+    text-style: bold;
+    color: #f5f2ed;
+    height: auto;
+}
+.dialog-subtitle {
+    color: #a8a59f;
+    height: auto;
+    padding-top: 1;
+}
+.dialog-warning {
+    color: #ff7b72;
+    height: auto;
+    padding-top: 1;
+}
+#dialog-preview {
+    height: auto;
+    max-height: 26;
+    background: #1e1d1b;
+    border: round #4d4b48;
+    padding: 0 1;
+    margin-top: 1;
+    scrollbar-size: 1 1;
+}
+#dialog-rule {
+    color: #8a8a85;
+    height: auto;
+    padding-top: 1;
+}
+.dialog-buttons {
+    height: auto;
+    padding-top: 1;
+}
+.dialog-buttons Button {
+    min-width: 16;
+    margin-right: 1;
+}
+.dialog-hint {
+    color: #5f5e5b;
+    height: auto;
+    padding-top: 1;
+}
+#deny-reason {
+    height: 3;
+    margin-top: 1;
+    background: #1e1d1b;
+    border: round #4d4b48;
+}
+#deny-reason:focus {
+    border: round #8f4f38;
+}
+
+/* 按钮：紧凑、低饱和；主按钮用陶土橙实心 */
+Button {
+    height: 3;
+    min-width: 14;
+    text-style: none;
+    color: #e8e6e3;
+    background: #33312e;
+    border: none;
+}
+Button:hover {
+    background: #454340;
+}
+Button:focus {
+    background: #4d4b48;
+}
+Button.-success,
+Button.-primary {
+    color: #1e1d1b;
+    background: #d97757;
+    border: none;
+    text-style: bold;
+}
+Button.-success:hover,
+Button.-primary:hover {
+    background: #e58a6b;
+}
+Button.-error {
+    color: #ffb0ab;
+    background: #2a1618;
+    border: none;
+}
+
+/* Input / OptionList：统一成深色面 */
+Input {
+    height: 3;
+    color: #e8e6e3;
+    background: #1e1d1b;
+    border: round #4d4b48;
+    padding: 0 1;
+}
+Input:focus {
+    border: round #8f4f38;
+}
+Input > .input--placeholder {
+    color: #5f5e5b;
+}
+
+/* ── pickers ────────────────────────────────────────────────────────── */
+#picker-dialog {
+    width: 88;
+    max-width: 94%;
+    height: auto;
+    max-height: 80%;
+    background: #262523;
+    border: round #4d4b48;
+    padding: 1 2;
+}
+#picker-input {
+    height: 3;
+    margin-top: 1;
+    background: #1e1d1b;
+    border: round #4d4b48;
+}
+#picker-input:focus {
+    border: round #8f4f38;
+}
+#picker-list {
+    height: auto;
+    max-height: 20;
+    margin-top: 1;
+    background: #1e1d1b;
+    border: tall #4d4b48;
+    padding: 0 1;
+}
+#picker-list > .option-list--option-highlighted {
+    background: #3a2a22;
+    color: #f5f2ed;
+}
+
+/* ── help ───────────────────────────────────────────────────────────── */
+#help-dialog {
+    width: 86%;
+    max-width: 110;
+    height: 86%;
+    background: #262523;
+    border: round #4d4b48;
+    padding: 1 2;
+}
+#help-scroll {
+    height: 1fr;
+    scrollbar-size: 1 1;
+    scrollbar-color: #454340;
+    scrollbar-background: #1e1d1b;
+}
+#help-scroll Markdown {
+    padding: 0 1;
+}
+
+/* ── question ───────────────────────────────────────────────────────── */
+#question-options {
+    height: auto;
+    max-height: 14;
+    margin-top: 1;
+    background: #1e1d1b;
+    border: tall #4d4b48;
+}
+#question-options > .option-list--option-highlighted,
+#question-options > .option-list--option-highlighted:hover {
+    background: #3a2a22;
+    color: #f5f2ed;
+}
+#question-input {
+    height: 3;
+    margin-top: 1;
+    background: #1e1d1b;
+    border: round #4d4b48;
+}
+#question-input:focus {
+    border: round #8f4f38;
+}

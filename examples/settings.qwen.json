@@ -1,0 +1,12 @@
+{
+  // 阿里云百炼 / DashScope 的 OpenAI 兼容模式。
+  // Key 写在 .env：DASHSCOPE_API_KEY=sk-...
+  "model": "qwen3-coder-plus",
+  "provider": "openai",
+  "maxTokens": 8192,
+  "providers": {
+    "openai": {
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    }
+  }
+}
