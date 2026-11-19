@@ -104,29 +104,84 @@ yot --mock
 
 ## 配置自己的大模型
 
-YotCode 支持两类 provider（供应商）：
+YotCode 把模型供应商归为**两大类**（配置字段 `provider` 只有这两个取值），
+理解它们的区别是配置的关键：
 
-- `anthropic`：Anthropic 官方 API（Claude 系列模型）
-- `openai`：**OpenAI 兼容接口**，包括 OpenAI、DeepSeek、通义千问、Kimi、智谱 GLM、
-  Ollama、vLLM 等
+| provider | 适用对象 | API Key 环境变量 | Base URL |
+| --- | --- | --- | --- |
+| `anthropic` | Anthropic 官方（Claude 系列） | `ANTHROPIC_API_KEY` | 默认 `https://api.anthropic.com`，一般不用填 |
+| `openai` | 所有 **OpenAI 兼容接口** | 见下方各家专用变量 | 多数自动识别，自建服务 / Ollama 需手填 |
+
+**如何区分**：判断标准是"接口协议"，不是"厂商名字"。
+- Anthropic 自家的 Claude API → 用 `anthropic`
+- 其他全部（OpenAI 官方、DeepSeek、通义千问、Kimi、智谱 GLM、Ollama、vLLM、
+  自建网关）→ 都用 `openai`，因为它们兼容 OpenAI 的 `/v1/chat/completions` 协议
 
 配置有三种方式，**优先级从高到低**：命令行参数 → 环境变量 / `.env` 文件 →
-`settings.json`。下面给出具体步骤。
+`settings.json`。
+
+### 两类 API 的配置示例（假例子，照格式填空即可）
+
+下面用**虚构的 Key** 演示两类配置长什么样。把 `sk-示例...` 换成你自己的真实 Key。
+
+**A 类 · `anthropic`（Anthropic 官方 Claude）**
+
+`.env` 文件（项目根目录或 `~/.yotcode/.env`）：
+```bash
+ANTHROPIC_API_KEY=sk-ant-示例0000000000000000000000000000
+```
+
+`settings.json`：
+```jsonc
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-5",
+  "maxTokens": 8192
+}
+```
+
+启动：只配了 Anthropic Key 时直接 `yot` 即可（会自动选 anthropic）。
+
+**B 类 · `openai`（OpenAI 兼容接口，以 DeepSeek 为例）**
+
+`.env` 文件：
+```bash
+DEEPSEEK_API_KEY=sk-示例0000000000000000000000000000
+```
+
+`settings.json`：
+```jsonc
+{
+  "provider": "openai",
+  "model": "deepseek-chat",
+  "providers": {
+    "openai": {
+      "baseUrl": "https://api.deepseek.com/v1"
+    }
+  }
+}
+```
+
+启动：`yot --model deepseek-chat`
+
+> **两类 Key 不要混用**：`ANTHROPIC_API_KEY` 只服务于 anthropic 类；各家专用 Key
+> （`DEEPSEEK_API_KEY` 等）只服务于 openai 类。若两类 Key 同时存在，程序默认选
+> anthropic，此时想走 openai 类请显式加 `--provider openai`。
 
 ### 第 1 步：准备 API Key
 
-在你选择的服务商官网注册并创建 API Key。常见服务商：
+在你选择的服务商官网注册并创建 API Key。常见服务商与对应的环境变量：
 
-| 服务商 | 需要的环境变量 | 自动识别的 Base URL |
-| --- | --- | --- |
-| Anthropic | `ANTHROPIC_API_KEY` | `https://api.anthropic.com` |
-| OpenAI | `OPENAI_API_KEY` | `https://api.openai.com/v1` |
-| DeepSeek | `DEEPSEEK_API_KEY` | `https://api.deepseek.com/v1` |
-| 通义千问 | `DASHSCOPE_API_KEY` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| Kimi / Moonshot | `MOONSHOT_API_KEY` | `https://api.moonshot.cn/v1` |
-| 智谱 GLM | `ZHIPUAI_API_KEY` | `https://open.bigmodel.cn/api/paas/v4` |
+| 类别 | 服务商 | Key 环境变量 | 自动识别的 Base URL |
+| --- | --- | --- | --- |
+| anthropic | Anthropic | `ANTHROPIC_API_KEY` | `https://api.anthropic.com` |
+| openai | OpenAI | `OPENAI_API_KEY` | `https://api.openai.com/v1` |
+| openai | DeepSeek | `DEEPSEEK_API_KEY` | `https://api.deepseek.com/v1` |
+| openai | 通义千问 | `DASHSCOPE_API_KEY` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| openai | Kimi / Moonshot | `MOONSHOT_API_KEY` | `https://api.moonshot.cn/v1` |
+| openai | 智谱 GLM | `ZHIPUAI_API_KEY` | `https://open.bigmodel.cn/api/paas/v4` |
 
-对于上表中的服务商，**只需设置对应的 `*_API_KEY`，Base URL 会自动识别**。
+对于上表中的服务商，**只需设置对应的 `*_API_KEY`，Base URL 会自动识别**，无需手填。
 
 ### 第 2 步：把密钥写入 `.env` 文件
 
@@ -266,39 +321,118 @@ yot --provider openai --base-url http://localhost:11434/v1 --model qwen2.5-coder
 
 如果不想每次都敲参数，可以把配置写进配置文件。配置按以下顺序合并，后面的覆盖前面的：
 
-1. `~/.yotcode/settings.json`（全局）
-2. `<项目>/.claude/settings.json`
-3. `<项目>/.yotcode/settings.json`（项目级，推荐）
-4. `<项目>/.claude/settings.local.json`
-5. `<项目>/.yotcode/settings.local.json`
+1. `~/.yotcode/settings.json`（全局，对所有项目生效）
+2. `<项目>/.yotcode/settings.json`（项目级，推荐）
+3. `<项目>/.yotcode/settings.local.json`（项目本地，通常不提交到 Git）
 
-在项目根目录创建 `.yotcode/settings.json`（支持注释的 JSONC），例如 DeepSeek 配置：
+> `<项目>` 指的是你运行 `yot` 时的当前目录。全局配置放一次，所有项目都能用；
+> 项目级配置只影响当前项目，且会覆盖全局里相同的字段。命令行参数优先级最高。
+
+#### 全局配置例子（假例子）
+
+放在 `~/.yotcode/settings.json`，对所有项目生效。下面是一个"内容大概长这样"的完整示例，
+字段都能按需删减，没写的用默认值：
 
 ```jsonc
 {
-  "model": "deepseek-chat",
-  "provider": "openai",
-  "maxTokens": 8192,
-  "maxTurns": 60,
-  "autoCompact": true,
-  "thinking": true,
+  // ---- 模型与供应商 ----
+  "model": "deepseek-chat",        // 主模型名
+  "provider": "openai",            // 两大类之一：anthropic 或 openai
+  "smallModel": "deepseek-chat",   // 轻量任务用的模型，省略则同主模型
+  "maxTokens": 8192,               // 单次回复最大 token 数
+  "maxTurns": 60,                  // 一轮对话最多工具调用轮数
+
+  // ---- 行为开关 ----
+  "permissionMode": "default",     // 权限模式，见下方参数表
+  "autoCompact": true,             // 上下文快满时自动压缩
+  "compactThreshold": 0.82,        // 触发压缩的上下文占比
+  "thinking": true,                // 是否展示模型思考过程
+  "theme": "yotcode",              // 主题名
+
+  // ---- API Key 地址（Key 本身放 .env，这里只放地址）----
   "providers": {
     "openai": {
       "baseUrl": "https://api.deepseek.com/v1"
     }
+  },
+
+  // ---- 权限规则 ----
+  "permissions": {
+    "allow": ["Bash(npm test:*)", "Read(./src/**)"],
+    "ask":   ["Bash(git push:*)"],
+    "deny":  ["Read(./.env)"]
   }
 }
 ```
 
-API Key 仍建议放在 `.env` 中。如果确实要写进配置，可用 `env` 字段：
+对应的全局密钥文件 `~/.yotcode/.env`（假例子）：
+
+```bash
+# openai 类：DeepSeek
+DEEPSEEK_API_KEY=sk-示例0000000000000000000000000000
+
+# 如果是 anthropic 类，则改成这一行（二选一，别混）
+# ANTHROPIC_API_KEY=sk-ant-示例0000000000000000000000000000
+```
+
+#### 项目级配置例子（假例子）
+
+在项目根目录建 `.yotcode/settings.json`，只需写要**覆盖全局**的字段。例如某项目想换成
+Claude、并额外禁止读密钥文件：
 
 ```jsonc
 {
-  "env": {
-    "DEEPSEEK_API_KEY": "sk-你的密钥"
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-5",
+  "permissions": {
+    "deny": ["Read(./secrets/*)"]
   }
 }
 ```
+
+> API Key 建议始终放 `.env` 或环境变量。若确实要写进 `settings.json`，可用 `env` 字段
+> （注意别提交到 Git）：
+> ```jsonc
+> { "env": { "DEEPSEEK_API_KEY": "sk-示例0000000000000000000000000000" } }
+> ```
+
+#### 全部可配置参数一览
+
+`settings.json` 支持以下字段（均为可选，省略则用默认值）：
+
+| 参数 | 类型 / 默认 | 作用 |
+| --- | --- | --- |
+| `model` | 字符串 / `null` | 主模型名，如 `claude-sonnet-4-5`、`deepseek-chat` |
+| `provider` | `anthropic`\|`openai` / `null` | 供应商类别，见上文两类说明 |
+| `smallModel` | 字符串 / `null` | 轻量任务用的模型，省略则同主模型 |
+| `maxTokens` | 整数 / `8192` | 单次回复允许的最大 token 数 |
+| `maxTurns` | 整数 / `60` | 一轮用户输入内最多进行多少轮工具调用 |
+| `permissionMode` | 字符串 / `default` | 权限模式：`default`、`acceptEdits`、`plan`、`bypassPermissions` |
+| `autoCompact` | 布尔 / `true` | 上下文接近上限时是否自动压缩历史 |
+| `compactThreshold` | 浮点 / `0.82` | 触发自动压缩的上下文占比（0~1） |
+| `thinking` | 布尔 / `true` | 是否展示模型的思考内容 |
+| `temperature` | 浮点 / `null` | 采样温度，省略则用服务端默认 |
+| `shell` | 字符串 / `null` | 指定 Bash 工具使用的 shell，省略则自动探测 |
+| `theme` | 字符串 / `yotcode` | 界面主题名 |
+| `systemPromptAppend` | 字符串 / `""` | 追加到系统提示词末尾的内容 |
+| `autoApproveEdits` | 布尔 / `false` | 是否自动批准文件编辑类操作 |
+| `permissions` | 对象 | 权限规则，含 `allow`/`deny`/`ask`/`additionalDirectories` 四个字符串数组 |
+| `hooks` | 对象 / `{}` | 生命周期钩子，按事件名配置命令列表 |
+| `mcpServers` | 对象 / `{}` | MCP 服务器配置，工具会以 `mcp__服务名__工具名` 形式加入 |
+| `env` | 对象 / `{}` | 注入到环境变量的键值对，可放 API Key（别提交） |
+| `providers` | 对象 / `{}` | 各供应商的 `apiKey` 与 `baseUrl`（`anthropic` / `openai` 两个子对象） |
+| `webSearch` | 对象 | 联网搜索配置，含 `provider` 字段 |
+| `ui` | 对象 | 界面细节，见下表 |
+
+`ui` 子字段：
+
+| 参数 | 类型 / 默认 | 作用 |
+| --- | --- | --- |
+| `ui.showTips` | 布尔 / `true` | 是否显示提示文案 |
+| `ui.showThinking` | 布尔 / `true` | 是否在界面显示思考块 |
+| `ui.compactOutput` | 布尔 / `false` | 是否紧凑显示工具输出 |
+| `ui.checkpoints` | 布尔 / `true` | 改文件前是否自动留检查点（供 `/revert` 回退） |
+| `ui.fontSize` | 整数 / `null` | 经典 conhost 下的终端字号（像素高），也可写 `.env` 的 `YOTCODE_FONT_SIZE` |
 
 也可以从 `examples/` 目录复制现成模板：
 
