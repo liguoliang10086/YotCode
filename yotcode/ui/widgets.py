@@ -674,14 +674,27 @@ class PromptTextArea(TextArea):
     async def _on_key(self, event: events.Key) -> None:
         key = event.key
         owner = self.owner
-        # Ctrl+Shift+V：从系统剪贴板读取截图，作为图片附件发送。
-        # 终端里的普通 Ctrl+V 只会传来文本，无法携带位图，所以必须用独立按键。
+        # Ctrl+Shift+V / Ctrl+Alt+V：显式从系统剪贴板读取截图作为图片附件。
         if key in ("ctrl+shift+v", "ctrl+alt+v"):
             event.stop()
             event.prevent_default()
             if owner is not None:
                 owner.attach_clipboard_image()
             return
+        # Ctrl+V：终端粘贴截图时，图片位图不会随 Paste 事件进来（终端只能传文本，
+        # 剪贴板是图片时往往只发这个按键、不发 Paste 事件）。所以在这里主动读一次
+        # 系统剪贴板：有图片就作为附件；没有图片则放行，交给 TextArea 默认行为
+        # 处理普通文本/文件路径的粘贴。
+        if key == "ctrl+v" and owner is not None:
+            from ..attachments import clipboard_image_block
+            block = clipboard_image_block()
+            if block is not None:
+                event.stop()
+                event.prevent_default()
+                owner.add_attachments([block])
+                owner.yot.notify("已从剪贴板附加图片", severity="information")
+                return
+            # 没有图片：不拦截，继续走 TextArea 的 paste 流程。
         # 空输入时按 ? 打开帮助；有内容时正常输入问号。
         if key in ("question_mark", "?") and not self.text.strip():
             event.stop()

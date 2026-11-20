@@ -74,20 +74,32 @@ async def test_multiple_chips_remove_correct_index(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_ctrl_v_empty_paste_reads_clipboard_image(tmp_path):
-    """Ctrl+V 粘贴空内容（终端粘贴截图的典型表现）应读取剪贴板图片为附件。"""
+async def test_ctrl_v_key_reads_clipboard_image(tmp_path):
+    """终端里 Ctrl+V 截图只发 Key 事件（无 Paste 事件），应主动读剪贴板图片为附件。"""
     app = _make_app(tmp_path)
     fake = ImageBlock("image/png", "BBBB")
     with patch("yotcode.attachments.clipboard_image_block", return_value=fake):
         async with app.run_test(size=(120, 30)) as pilot:
             await pilot.pause(0.2)
             area: PromptArea = app.prompt_area()
-            prompt: PromptTextArea = area.prompt
-            # 模拟终端里 Ctrl+V 一张截图：Paste 事件 text 为空
-            prompt.post_message(events.Paste(""))
+            # 真实按键：终端里 Ctrl+V 的剪贴板图片不会转成 Paste 事件
+            await pilot.press("ctrl+v")
             await pilot.pause(0.2)
             assert len(area.attachments) == 1
             assert isinstance(area.attachments[0], ImageBlock)
+
+
+@pytest.mark.asyncio
+async def test_ctrl_v_without_image_falls_through(tmp_path):
+    """Ctrl+V 但剪贴板没有图片时不应拦截，交给默认粘贴流程。"""
+    app = _make_app(tmp_path)
+    with patch("yotcode.attachments.clipboard_image_block", return_value=None):
+        async with app.run_test(size=(120, 30)) as pilot:
+            await pilot.pause(0.2)
+            area: PromptArea = app.prompt_area()
+            await pilot.press("ctrl+v")
+            await pilot.pause(0.2)
+            assert area.attachments == []
 
 
 @pytest.mark.asyncio
