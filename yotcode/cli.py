@@ -567,6 +567,14 @@ def main(argv: list[str] | None = None) -> int:
     返回的整数会成为程序退出码：0 正常，1 出错，130 用户按 Ctrl+C 打断。
     """
     configure_stdio()  # 修正 Windows 终端的编码/颜色设置
+    # 兜底：再确认一次 PATH 已配置。正常情况下安装时落地的 .pth 已经在 Python
+    # 启动时处理过（见 yotcode/_boot.py）；这里额外调用是为了兼容少数没执行 .pth
+    # 的启动方式。ensure_path() 幂等且静默，源码直接运行时不会误写（没有 launcher）。
+    try:
+        from ._boot import ensure_path
+        ensure_path()
+    except Exception:
+        pass
     parser = build_parser()  # 定义所有命令行参数（-p、--model 等）
     args = parser.parse_args(argv)  # 解析用户实际输入的参数
     cwd = Path.cwd()  # 当前工作目录（也就是项目根目录）

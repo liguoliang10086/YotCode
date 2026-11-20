@@ -45,7 +45,14 @@ pip install "git+https://github.com/liguoliang10086/YotCode.git"
 python -m pip install "git+https://github.com/liguoliang10086/YotCode.git"
 ```
 
-安装完成后验证：
+**PATH 会自动配置，无需手动操作**：安装时会在 Python 的 `site-packages` 放一个
+引导文件（`yotcode_boot.pth`），它会在之后的任意一次 Python 启动时自动把 `yot`
+所在的 `Scripts` 目录写进**用户级 PATH**（Windows 写注册表 HKCU，无需管理员权限；
+macOS/Linux 请见下方说明）。因此安装完只需：
+
+1. 随便运行一次 Python（例如 `python --version`，pip 安装本身之后的下一条命令即可）；
+2. **重新打开终端**（PATH 变更对新窗口生效）；
+3. 验证：
 
 ```bash
 yot --version
@@ -53,27 +60,37 @@ yot --version
 yotcode --version
 ```
 
-#### 找不到 `yot` 命令？配置 PATH
+> 为什么不是"pip 装完当场生效"？pip 没有标准的"安装后脚本"钩子，且 PATH 的
+> Windows 注册表变更本来就要重开终端才生效；引导文件保证了"重启终端前 PATH 已写好"。
 
-`pip install` 会把 `yot` / `yotcode` 装到当前 Python 环境的 `Scripts`（Windows）或
-`bin`（macOS/Linux）目录。如果这个目录不在 PATH，直接敲 `yot` 会提示"不是内部或
-外部命令"。用下面任一方式解决：
+macOS / Linux 上并不会自动改 shell 启动文件（不同 shell 差异大，避免误改），
+请任选一种：
 
 ```bash
-# 方式 1：让程序自动把命令目录写入"用户级 PATH"（推荐，一次即可）
+# 方式 1：用程序自动把命令目录追加到 ~/.bashrc 或 ~/.zshrc
 python -m yotcode --setup-path
-# 或：yot --setup-path（前提是 yot 已经能运行）
 
-# 方式 2：一键安装脚本（安装 + PATH + 生成模板，全帮你做）
+# 方式 2：手动把 Scripts/bin 目录加入 PATH（见 python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 的输出）
+```
+
+#### 仍然找不到 `yot` 命令？
+
+绝大多数情况下上面的自动引导已经够用。如果因为某些安装方式（如 `--target`、
+精简环境）没触发引导，可以手动补一次：
+
+```bash
+# 让程序自动把命令目录写入"用户级 PATH"（一次即可，幂等）
+python -m yotcode --setup-path
+
+# 或：一键安装脚本（安装 + PATH + 生成模板，全帮你做）
 python install.py
 # 已经 pip 装过、只想配 PATH：python install.py --path-only
 ```
 
-`--setup-path` 会修改**用户级** PATH（Windows 写入注册表 HKCU，macOS/Linux 追加到
-shell 启动文件），**不需要管理员权限**，也**不会改动系统级 PATH**。执行后需要
-**重新打开终端**才会生效。
+`--setup-path` 修改**用户级** PATH（Windows 写注册表 HKCU，macOS/Linux 追加到 shell
+启动文件），**不需要管理员权限**，也**不会改动系统级 PATH**。执行后需**重新打开终端**。
 
-> 如果你不想改 PATH，也可以直接用 `python -m yotcode` 来运行，效果完全一样：
+> 如果你不想改 PATH，也可以直接用 `python -m yotcode` 运行，效果完全一样：
 > `python -m yotcode --version`、`python -m yotcode --model deepseek-chat`。
 
 #### 首次运行：自动生成配置模板
