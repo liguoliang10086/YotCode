@@ -22,6 +22,37 @@ def _make_app(tmp_path: Path) -> YotCodeApp:
 
 
 @pytest.mark.asyncio
+async def test_chip_renders_icon_filename_and_has_height(tmp_path):
+    """附件筹码必须显示图标+文件名且高度>0，否则旧 conhost 下只剩纯色块看不懂。"""
+    app = _make_app(tmp_path)
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause(0.2)
+        area: PromptArea = app.prompt_area()
+        area.add_attachments([ImageBlock("image/png", "AAAA", filename="shot.png")])
+        await pilot.pause(0.2)
+        chip = list(app.query(".attachment-chip"))[0]
+        rendered = chip.render().plain
+        assert "IMG" in rendered
+        assert "shot.png" in rendered
+        assert "x" in rendered
+        assert chip.size.height > 0, "筹码高度不能为 0，否则文字不显示只剩色块"
+
+
+@pytest.mark.asyncio
+async def test_clipboard_image_gets_default_filename(tmp_path):
+    """剪贴板截图应带默认文件名，筹码才能显示可读名称而非空白。"""
+    from PIL import Image
+    from yotcode.attachments import clipboard_image_block
+    with patch(
+        "PIL.ImageGrab.grabclipboard",
+        return_value=Image.new("RGB", (2, 2)),
+    ):
+        block = clipboard_image_block()
+    assert block is not None
+    assert getattr(block, "filename", None)
+
+
+@pytest.mark.asyncio
 async def test_clicking_attachment_chip_removes_it_without_crash(tmp_path):
     """真实鼠标点击附件筹码：不能崩溃，并正确移除该附件。"""
     app = _make_app(tmp_path)

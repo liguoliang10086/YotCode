@@ -867,19 +867,46 @@ class PromptArea(Vertical):
         self.attachments.extend(added)
         if len(blocks) > room:
             self.yot.notify("一次最多附加 10 个文件，其余已忽略", severity="warning")
-        # 重建筹码条：每个附件一个可点击移除的标签。
+        # 重建筹码条：每个附件一个可点击移除的标签（图标 + 文件名 + ×）。
         self.attachment_bar.remove_children()
         for index, block in enumerate(self.attachments):
-            chip = Static(
-                Text(f" {describe_block(block)}  ×", style=ACCENT_SOFT),
-                classes="attachment-chip",
-                markup=False,
+            # 图标用 ASCII（conhost 的 GBK/终端字体对 ▣ 等几何符号支持很差，
+            # 会显示成方块）；图片标 IMG，文本文件标 TXT，文件名取不到时回退类型名。
+            if isinstance(block, ImageBlock):
+                icon = "IMG"
+                name = getattr(block, "filename", None) or "image.png"
+            else:
+                icon = "TXT"
+                # 文本文件块内容是 <file path="...">，尽量抽出里面的文件名。
+                name = self._attachment_name(block)
+            label = Text.assemble(
+                (f"[", "#8f4f38"),
+                (f"{icon}", "bold #f5b98f"),
+                ("] ", "#8f4f38"),
+                (f"{name}", "#e8e6e3"),
+                ("  x", "bold #d97757"),
             )
-            # 用闭包记住索引，点击时移除对应附件。
+            chip = Static(label, classes="attachment-chip", markup=False)
+            # 记住索引，点击时移除对应附件（见 on_click）。
             chip.index = index  # type: ignore[attr-defined]
             self.attachment_bar.mount(chip)
         self.attachment_bar.display = bool(self.attachments)
         self.yot.call_after_refresh(self._update_height)
+
+    @staticmethod
+    def _attachment_name(block: Block) -> str:
+        """从附件块里取一个简短、可读的文件名用于筹码展示。"""
+        if isinstance(block, ImageBlock):
+            return getattr(block, "filename", None) or "image.png"
+        if isinstance(block, TextBlock):
+            # 形如 <file path="a.py">\n...\n</file>，抽 path 属性。
+            import re
+            match = re.search(r'<file path="([^"]+)"', block.text)
+            if match:
+                return match.group(1)
+            first = block.text.strip().splitlines()[0] if block.text.strip() else ""
+            return (first[:24] + "…") if len(first) > 24 else (first or "file")
+        return "attachment"
 
     def on_click(self, event: events.Click) -> None:
         """点击附件筹码 × 移除该附件。

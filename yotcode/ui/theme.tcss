@@ -247,17 +247,20 @@ MarkdownLink {
     padding: 0 0 0 1;
     margin: 0 0 1 0;
 }
+/* 高度用 auto（不要固定 1）：固定高度在 conhost 下会把内容裁成纯色块，
+   文字（图标/文件名/×）渲染不出来，只剩背景色，看着像个看不懂的小方块。 */
 .attachment-chip {
-    height: 1;
+    height: auto;
     width: auto;
     padding: 0 1;
     margin-right: 1;
     background: #3a302a;
     color: #d9a17f;
-    border: round #6b4b38;
+    border: round #8f4f38;
 }
 .attachment-chip:hover {
     background: #4a3a2f;
+    border: round #d97757;
 }
 #prompt-row {
     height: auto;

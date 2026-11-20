@@ -172,7 +172,13 @@ def clipboard_image_block() -> ImageBlock | None:
         return None
     if len(data) > MAX_IMAGE_BYTES:
         return None
-    return ImageBlock(media_type="image/png", data=base64.b64encode(data).decode("ascii"))
+    # 给剪贴板截图一个默认文件名，让 UI 筹码与会话回放能显示成
+    # "image.png" 这样的可读标签，而不是空白的"图片"。
+    return ImageBlock(
+        media_type="image/png",
+        data=base64.b64encode(data).decode("ascii"),
+        filename="clipboard-image.png",
+    )
 
 
 def attachment_candidates(pasted_text: str, base_dir: Path | None = None) -> list[Block]:
