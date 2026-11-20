@@ -713,23 +713,43 @@ class PromptTextArea(TextArea):
         await super()._on_key(event)
 
     async def _on_paste(self, event: events.Paste) -> None:
-        """粘贴文本：若内容是文件路径（资源管理器复制文件或拖放后的路径），
-        自动识别成附件；否则走 TextArea 默认行为，把文本插进输入框。
+        """粘贴处理，覆盖三类场景：
 
-        这样覆盖用户说的"拖放/粘贴文件路径自动识别为附件"场景——终端本身
-        不支持真正的拖放二进制数据，但拖放到输入框最终会变成一段路径文本。
+        1. 粘贴的是文件路径（资源管理器复制文件 / 拖放后的路径文本）→ 转成附件；
+        2. 粘贴内容为空或纯空白（典型于终端里 Ctrl+V 一张截图：终端只传文本，
+           位图不会随 Paste 事件进来）→ 尝试从系统剪贴板读图片作为附件；
+        3. 其他有实义的文本（粘贴代码、普通文字）→ 走 TextArea 默认行为。
+
+        Ctrl+Shift+V 仍可直接读剪贴板图片（见 _on_key），两种方式并存。
         """
         owner = self.owner
-        candidates = None
-        if owner is not None and event.text:
+        if owner is None:
+            await super()._on_paste(event)
+            return
+
+        text = event.text or ""
+        if text.strip():
+            # 有实义文本：优先识别其中夹带的文件路径。
             from ..attachments import attachment_candidates
-            candidates = attachment_candidates(event.text, owner.yot.config.cwd)
-        if candidates:
-            # 粘贴的是文件路径：转成附件，不再把路径文本塞进输入框。
+            candidates = attachment_candidates(text, owner.yot.config.cwd)
+            if candidates:
+                event.stop()
+                event.prevent_default()
+                owner.add_attachments(candidates)
+                owner.yot.notify(f"已附加 {len(candidates)} 个文件", severity="information")
+                return
+            # 普通文本，按默认行为插入输入框，不去碰剪贴板里的残留图片。
+            await super()._on_paste(event)
+            return
+
+        # 空粘贴内容：尝试读系统剪贴板截图（Ctrl+V 截图时终端只给空文本）。
+        from ..attachments import clipboard_image_block
+        block = clipboard_image_block()
+        if block is not None:
             event.stop()
             event.prevent_default()
-            owner.add_attachments(candidates)
-            owner.yot.notify(f"已附加 {len(candidates)} 个文件", severity="information")
+            owner.add_attachments([block])
+            owner.yot.notify("已从剪贴板附加图片", severity="information")
             return
         await super()._on_paste(event)
 
@@ -822,11 +842,13 @@ class PromptArea(Vertical):
 
     # -- attachments -------------------------------------------------------
     def add_attachments(self, blocks: list[Block]) -> None:
-        """把附件加入待发送列表并刷新筹码条。超过上限时提示并截断。"""
+        """把附件加入待发送列表并刷新筹码条。超过上限时提示并截断。
+
+        即使 blocks 为空也继续重建筹码条，让它始终与 self.attachments 一致；
+        否则移除最后一个附件后旧筹码会残留在界面上。
+        """
         from ..attachments import describe_block  # 延迟导入，避免循环依赖
 
-        if not blocks:
-            return
         room = max(0, 10 - len(self.attachments))
         added = blocks[:room]
         self.attachments.extend(added)
@@ -847,10 +869,15 @@ class PromptArea(Vertical):
         self.yot.call_after_refresh(self._update_height)
 
     def on_click(self, event: events.Click) -> None:
-        """点击附件筹码 × 移除该附件。"""
-        target = event.target
+        """点击附件筹码 × 移除该附件。
+
+        Textual 8.x 的 Click 事件用 widget 表示「被点击的控件」，旧的 target
+        属性已被移除；若仍访问 event.target，输入区任何点击都会抛
+        AttributeError 导致应用退出。这里改用 event.widget 并做防御。
+        """
+        target = getattr(event, "widget", None)
         index = getattr(target, "index", None)
-        if index is not None and "attachment-chip" in (target.classes or ()):
+        if index is not None and "attachment-chip" in (getattr(target, "classes", None) or ()):
             event.stop()
             self.remove_attachment(int(index))
 
