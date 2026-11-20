@@ -49,51 +49,73 @@ def _has_launcher(scripts: Path) -> bool:
     return (scripts / "yot.exe").exists() or (scripts / "yot").exists()
 
 
-def _add_windows_user_path(directory: Path) -> bool:
-    """把目录写进 Windows 用户级 PATH（HKCU\\Environment）并广播变更。"""
-    import winreg
+def add_user_path(directory: Path) -> bool:
+    """把目录写进用户级 PATH（幂等），返回本次是否真的写入。
 
+    Windows 写注册表 HKCU\\Environment 并广播；类 Unix 追加到 shell 启动文件。
+    这是公开 API：既被 .pth 引导（ensure_path）调用，也被 setup.py 在构建阶段
+    调用，保证两条路径行为一致。任何异常都向外抛，由调用方决定如何处理。
+    """
     dir_str = str(directory)
-    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ)
-    try:
+    if os.name == "nt":
+        import winreg
+
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ)
         try:
-            current, _ = winreg.QueryValueEx(key, "Path")
-        except FileNotFoundError:
-            current = ""
-    finally:
-        winreg.CloseKey(key)
+            try:
+                current, _ = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                current = ""
+        finally:
+            winreg.CloseKey(key)
 
-    parts = [p for p in current.split(";") if p]
-    if any(p.lower().rstrip("\\/") == dir_str.lower().rstrip("\\/") for p in parts):
-        return False  # 已存在，幂等返回
+        parts = [p for p in current.split(";") if p]
+        if any(p.lower().rstrip("\\/") == dir_str.lower().rstrip("\\/") for p in parts):
+            return False  # 已存在，幂等返回
 
-    parts.append(dir_str)
-    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE)
+        parts.append(dir_str)
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE)
+        try:
+            winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, ";".join(parts))
+        finally:
+            winreg.CloseKey(key)
+
+        # 广播环境变量变更：新开的终端会立即看到（已开着的窗口仍需重开）。
+        try:
+            import ctypes
+            result = ctypes.c_ulong()
+            ctypes.windll.user32.SendMessageTimeoutW(
+                0xFFFF, 0x001A, 0, "Environment",
+                0x0002, 5000, ctypes.byref(result),
+            )
+        except Exception:
+            pass
+        return True
+
+    # 类 Unix：追加到 shell 启动文件。
+    shell = os.environ.get("SHELL", "")
+    home = Path.home()
+    if "zsh" in shell:
+        rc = home / ".zshrc"
+    elif "bash" in shell:
+        rc = home / ".bashrc"
+    else:
+        rc = home / ".profile"
+    line = f'export PATH="{dir_str}:$PATH"  # YotCode CLI'
     try:
-        winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, ";".join(parts))
-    finally:
-        winreg.CloseKey(key)
-
-    # 广播环境变量变更：新开的终端会立即看到（已开着的窗口仍需重开）。
-    try:
-        import ctypes
-        result = ctypes.c_ulong()
-        ctypes.windll.user32.SendMessageTimeoutW(
-            0xFFFF, 0x001A, 0, "Environment",
-            0x0002, 5000, ctypes.byref(result),
-        )
-    except Exception:
-        pass
-    return True
+        text = rc.read_text(encoding="utf-8", errors="ignore") if rc.exists() else ""
+        if "YotCode CLI" in text and dir_str in text:
+            return False
+        with rc.open("a", encoding="utf-8") as fh:
+            fh.write("\n" + line + "\n")
+        return True
+    except OSError:
+        return False
 
 
 def ensure_path() -> None:
     """在 Python 启动时被调用：如需要则自动把 yot 所在目录加入用户 PATH。"""
     try:
-        # 类 Unix 环境由用户 shell 启动文件管理，且本工具主要面向 Windows，
-        # 这里只在 Windows 上自动改 PATH。
-        if os.name != "nt":
-            return
         scripts = _scripts_dir()
         if not _has_launcher(scripts):
             return
@@ -104,7 +126,7 @@ def ensure_path() -> None:
             Path(probe).write_text(str(scripts), encoding="utf-8")
             return
 
-        _add_windows_user_path(scripts)
+        add_user_path(scripts)
     except Exception:
         # .pth 在解释器启动早期执行，任何异常都必须吞掉。
         pass

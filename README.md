@@ -45,14 +45,13 @@ pip install "git+https://github.com/liguoliang10086/YotCode.git"
 python -m pip install "git+https://github.com/liguoliang10086/YotCode.git"
 ```
 
-**PATH 会自动配置，无需手动操作**：安装时会在 Python 的 `site-packages` 放一个
-引导文件（`yotcode_boot.pth`），它会在之后的任意一次 Python 启动时自动把 `yot`
-所在的 `Scripts` 目录写进**用户级 PATH**（Windows 写注册表 HKCU，无需管理员权限；
-macOS/Linux 请见下方说明）。因此安装完只需：
+**PATH 会在安装过程中自动配置，无需手动操作**：`pip install` 构建安装包时，
+会直接把 `yot` 所在的 `Scripts` 目录写进**用户级 PATH**（Windows 写注册表 HKCU，
+无需管理员权限）；同时安装会在 `site-packages` 放一个引导文件（`yotcode_boot.pth`），
+作为兜底在之后每次 Python 启动时再确认一次。因此安装完只需：
 
-1. 随便运行一次 Python（例如 `python --version`，pip 安装本身之后的下一条命令即可）；
-2. **重新打开终端**（PATH 变更对新窗口生效）；
-3. 验证：
+1. **关闭当前终端，重新打开一个新的**（关键！见下方说明）；
+2. 验证：
 
 ```bash
 yot --version
@@ -60,11 +59,15 @@ yot --version
 yotcode --version
 ```
 
-> 为什么不是"pip 装完当场生效"？pip 没有标准的"安装后脚本"钩子，且 PATH 的
-> Windows 注册表变更本来就要重开终端才生效；引导文件保证了"重启终端前 PATH 已写好"。
+> **为什么安装后必须重开终端？** 这是 Windows 的硬性机制，与本项目无关：
+> 一个已打开的 cmd/PowerShell 窗口，其 PATH 在窗口启动时就固定了，任何安装程序
+> 都无法修改一个"已经在运行"的窗口的环境变量。安装过程中写的 PATH 只对**新开**
+> 的窗口生效。pip 自己在安装末尾打印的 "scripts ... not on PATH" 警告也是这个原因，
+> 属正常现象，重开终端即可。npm、Node 等工具安装后同样要重开终端。
 
-macOS / Linux 上并不会自动改 shell 启动文件（不同 shell 差异大，避免误改），
-请任选一种：
+macOS / Linux 会自动把 Scripts/bin 目录追加到 shell 启动文件（`~/.bashrc` /
+`~/.zshrc` / `~/.profile`），同样需要重开终端或 `source` 一下。如果自动配置未生效，
+可手动兜底：
 
 ```bash
 # 方式 1：用程序自动把命令目录追加到 ~/.bashrc 或 ~/.zshrc
