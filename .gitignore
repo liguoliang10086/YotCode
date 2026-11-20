@@ -31,6 +31,7 @@ htmlcov/
 # Editor / OS
 .vscode/
 .idea/
+.codebuddy/
 .DS_Store
 Thumbs.db
 
