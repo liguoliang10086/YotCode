@@ -147,7 +147,8 @@ def clipboard_image_block() -> ImageBlock | None:
     """从系统剪贴板读取截图并转成 ImageBlock；没有图片或环境不支持时返回 None。
 
     终端里的普通 Ctrl+V 只会传来文本，不会携带剪贴板位图，因此这里直接读
-    操作系统剪贴板。Pillow 是可选依赖：未安装时返回 None，由调用方给出提示。
+    操作系统剪贴板。Pillow 已是必需依赖，但这里仍做防御性处理：环境异常时
+    返回 None，由调用方给出友好提示，不让剪贴板问题拖垮整个附件功能。
     """
     try:
         from PIL import ImageGrab  # type: ignore[import-not-found]

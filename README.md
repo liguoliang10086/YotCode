@@ -676,11 +676,8 @@ yot --image shot.png          # 交互 TUI 里带着图片启动
 
 截图到剪贴板后，在输入框按 `Ctrl+Shift+V`（部分终端用 `Ctrl+Alt+V`）即可附加。
 终端里的普通 `Ctrl+V` 只会传文本、无法携带位图，所以使用独立按键。
-该功能依赖可选库 Pillow，未安装时会给出友好提示，不影响其他功能：
-
-```bash
-pip install Pillow            # 或 pip install -e ".[images]"
-```
+Pillow 已作为项目必需依赖，`pip install` 后即可直接使用，无需额外安装：
+若当前环境读取失败会给出友好提示，不影响其他附件方式。
 
 **3. `@文件` 智能识别**
 
@@ -760,7 +757,7 @@ TUI 里按 `Ctrl+R` 或输入 `/resume` 打开的是图形化选择器，两者�
 | `Shift+Tab` | 切换权限模式 |
 | `Ctrl+P` | 命令面板 |
 | `Ctrl+R` | 恢复会话 |
-| `Ctrl+Shift+V` / `Ctrl+Alt+V` | 从剪贴板附加截图（需 Pillow） |
+| `Ctrl+Shift+V` / `Ctrl+Alt+V` | 从剪贴板附加截图 |
 | `Ctrl+O` | 展开 / 折叠工具输出 |
 | `Ctrl+L` | 清屏 |
 | `Ctrl+T` | 显示待办 |

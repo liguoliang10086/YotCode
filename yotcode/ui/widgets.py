@@ -863,12 +863,12 @@ class PromptArea(Vertical):
             self.add_attachments(current)
 
     def attach_clipboard_image(self) -> None:
-        """读取系统剪贴板截图作为图片附件（Pillow 可选依赖）。"""
+        """读取系统剪贴板截图作为图片附件（Pillow 已随项目安装）。"""
         from ..attachments import clipboard_image_block
         block = clipboard_image_block()
         if block is None:
             self.yot.notify(
-                "剪贴板中没有图片，或未安装 Pillow（pip install Pillow）",
+                "剪贴板中没有图片，或无法读取剪贴板（请确认已安装 Pillow）",
                 severity="warning",
             )
             return

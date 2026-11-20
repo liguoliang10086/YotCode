@@ -15,6 +15,9 @@ dependencies = [
     "textual>=8.0,<9",
     "rich>=13.7",
     "httpx>=0.27",
+    # 剪贴板截图（Ctrl+Shift+V）需要 Pillow 读取系统剪贴板；作为必需依赖，
+    # pip install 后即可开箱即用，无需用户额外安装。
+    "Pillow>=10",
 ]
 
 [project.scripts]
@@ -25,8 +28,6 @@ yotcode = "yotcode.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23"]
-# 剪贴板截图需要 Pillow；不装也能用（粘贴/拖放/@文件/CLI 附件都正常）。
-images = ["Pillow>=10"]
 
 [tool.setuptools.packages.find]
 include = ["yotcode*"]
