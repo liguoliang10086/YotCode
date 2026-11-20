@@ -8,7 +8,8 @@
   5. tools/          文件、Shell、网络、待办、子代理、MCP 等工具
   6. permissions.py  工具调用前的 allow / ask / deny 判断
   7. session.py      JSONL 会话持久化与恢复
-  8. ui/             Textual 终端界面（app / widgets / modals / render）
+  8. attachments.py  图片/文件附件：路径、剪贴板截图 → 内容块
+  9. ui/             Textual 终端界面（app / widgets / modals / render）
 
 命令行入口是 `yot`（老名字 claudepy / ccpy 仍然可用）。
 

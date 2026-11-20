@@ -1,7 +1,15 @@
-"""Minimal MCP (Model Context Protocol) stdio client.
+"""MCP 客户端：连接外部 MCP 服务器，把它提供的工具"借"进来给模型用。
 
-Supports tools/list and tools/call over newline-delimited JSON-RPC, which is
-all YotCode needs to consume most MCP servers.
+Minimal MCP (Model Context Protocol) stdio client.
+
+MCP 是一个开放协议，很多第三方工具（数据库、浏览器、各种 SaaS）都提供 MCP 服务。
+本模块用子进程启动 MCP 服务器，通过 stdin/stdout 交换"一行一条"的 JSON-RPC 消息，
+只实现两个方法就够了：
+  * tools/list  -> 问服务器"你有哪些工具"
+  * tools/call  -> 让服务器执行某个工具
+
+拿到的工具会被包装成普通 Tool（见 MCPTool），混进内置工具清单里，模型用起来
+和用 Read / Grep 没有区别。这样 YotCode 不用为每个第三方服务单独写适配代码。
 """
 from __future__ import annotations
 

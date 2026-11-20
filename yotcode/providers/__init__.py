@@ -1,4 +1,13 @@
-"""Provider factory."""
+"""供应商工厂：根据配置创建合适的大模型供应商。
+
+Provider factory. 调用 create_provider(config) 时会按优先级选一个实现：
+  * 命令行带了 --mock      -> MockProvider（离线模拟，不需要 Key）
+  * provider == anthropic  -> AnthropicProvider（Claude 系列）
+  * 其他（openai 兼容）    -> OpenAIProvider（DeepSeek / Qwen / Kimi / GLM / Ollama 等）
+
+所有供应商都继承 base.py 里的 Provider，对外提供统一的 stream() 接口，
+所以 agent.py 不需要关心当前用的是哪家模型。这里还顺带挂上全局的 API 日志器。
+"""
 from __future__ import annotations
 
 import os

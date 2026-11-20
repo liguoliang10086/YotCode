@@ -1,7 +1,14 @@
-"""Deterministic offline provider used for demos and tests.
+"""离线模拟供应商：不需要 API Key 就能跑通整个流程（yot --mock）。
 
-It streams realistic-looking markdown and can exercise the tool loop without
-an API key (`yot --mock`).
+Deterministic offline provider used for demos and tests.
+
+为什么需要它：
+  * 新手体验：没有 Key 也能 run.cmd --mock 看完整界面和工具链；
+  * 自动化测试：返回内容固定（deterministic），测试断言才稳定。
+
+它和其他供应商一样实现 Provider.stream()，会"假装"流式吐出一段 Markdown
+文本，并在你问到特定关键词时模拟工具调用，从而把 agent.py 的主循环
+（请求 -> 工具 -> 回填 -> 再来一轮）完整走一遍。真实请求不会发生。
 """
 from __future__ import annotations
 

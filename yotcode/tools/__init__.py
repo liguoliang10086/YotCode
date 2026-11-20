@@ -1,4 +1,14 @@
-"""Built-in tool registry."""
+"""内置工具注册中心：把所有工具装配成一份清单交给 Agent。
+
+Built-in tool registry.
+
+create_tools() 在这里 new 出全部内置工具（Read / Write / Edit / Bash / Grep 等），
+再按配置里的白名单 / 黑名单过滤。Agent 拿到清单后，把每个工具的 name、
+description、input_schema 告诉大模型；模型请求某个工具时，Agent 按名字从这份
+清单里找到对应实例并调用它的 run()。
+
+想加一个新工具：写好子类后，来这里的 create_tools() 里注册一次即可。
+"""
 from __future__ import annotations
 
 import fnmatch
