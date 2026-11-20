@@ -52,6 +52,8 @@ from ..subagents import subagent_listing
 from ..utils import display_path
 from ..tools import ToolResult, create_tools
 from ..types import (
+    Block,
+    ImageBlock,
     TextBlock,
     ToolResultBlock,
     ToolUseBlock,
@@ -206,7 +208,7 @@ class YotCodeApp(App[None]):
         Binding("f1", "help", "Help", priority=True, show=False),
     ]
 
-    def __init__(self, config: Config, initial_prompt: str | None = None,
+    def __init__(self, config: Config, initial_prompt: str | list[Block] | None = None,
                  session: Session | None = None) -> None:
         # 使用 Textual 原生 WindowsDriver。曾经注入过自定义 driver 并在进入
         # 备用屏幕后手动 \x1b[2J，又叠加 _on_resize override + LINES=-1 +
@@ -232,7 +234,7 @@ class YotCodeApp(App[None]):
         self._thinking_indicator: ThinkingIndicator | None = None
         self.cards: dict[str, ToolCard] = {}
         self.task_cards: dict[str, ToolCard] = {}
-        self.queue: list[str] = []
+        self.queue: list[str | list[Block]] = []
         self._last_ctrl_c = 0.0
         self._last_scroll = 0.0
         self._file_cache: list[tuple[str, bool]] | None = None
@@ -366,9 +368,10 @@ class YotCodeApp(App[None]):
         )
         self.transcript().mount(panel)
 
-    def add_user(self, text: str) -> None:
+    def add_user(self, content: str | list[Block]) -> None:
+        """显示一条用户消息。content 可为纯文本或内容块（含图片/文件附件）。"""
         self.transcript().add_class("has-messages")
-        self.transcript().mount(UserMessage(text))
+        self.transcript().mount(UserMessage(content))
         self._scroll_soon()
 
     def add_notice(self, message: str, level: str = "info") -> None:
@@ -645,50 +648,70 @@ class YotCodeApp(App[None]):
     def prompt_area(self) -> PromptArea:
         return self.query_one(PromptArea)
 
-    def handle_submit(self, text: str) -> None:
-        """输入框回车后的总入口：区分 shell、记忆、斜杠命令和普通提问。"""
-        text = text.strip()
-        if not text:
+    def handle_submit(self, content: str | list[Block]) -> None:
+        """输入框回车后的总入口：区分 shell、记忆、斜杠命令和普通提问。
+
+        content 可以是纯文本，也可以是带图片/文件附件的内容块列表。
+        shell / 记忆 / 斜杠命令只对纯文本有意义；带附件时一律当作普通提问。
+        """
+        # 从内容块里抽出纯文本，用于前缀判断（! / # / /）；图片块会被忽略。
+        text = (
+            content.strip()
+            if isinstance(content, str)
+            else "\n".join(b.text for b in content if isinstance(b, TextBlock)).strip()
+        )
+        has_attachments = isinstance(content, list) and any(
+            isinstance(b, ImageBlock) for b in content
+        )
+        if not text and not has_attachments:
             return
-        # "!!" 是转义写法，表示把 "!xxx" 作为普通消息发给模型。
-        if text.startswith("!!"):
-            text = text[1:]
-        if text.startswith("!"):
-            self.run_worker(self._run_shell(text[1:].strip()), group="shell", exclusive=True)
-            return
-        if text.startswith("#"):
-            self._remember(text[1:].strip())
-            return
-        parsed = parse_slash(text)
-        if parsed is not None:
-            name, args = parsed
-            self.run_worker(self._handle_slash(name, args), group="command", exclusive=True)
-            return
+        # 只有纯文本消息才解析 ! / # / 斜杠命令；带附件的消息直接发给模型。
+        if not has_attachments:
+            # "!!" 是转义写法，表示把 "!xxx" 作为普通消息发给模型。
+            if text.startswith("!!"):
+                text = text[1:]
+            if text.startswith("!"):
+                self.run_worker(self._run_shell(text[1:].strip()), group="shell", exclusive=True)
+                return
+            if text.startswith("#"):
+                self._remember(text[1:].strip())
+                return
+            parsed = parse_slash(text)
+            if parsed is not None:
+                name, args = parsed
+                self.run_worker(self._handle_slash(name, args), group="command", exclusive=True)
+                return
         if self.busy:
             # 模型正在输出时继续提交不会丢，先排队，当前回合结束后自动发送。
-            self.queue.append(text)
+            self.queue.append(content)
             self.add_notice("Queued — I'll send it when the current turn finishes.", "info")
             self.set_status("idle")
             return
-        self.send_prompt(text)
+        self.send_prompt(content)
 
-    def send_prompt(self, text: str) -> None:
-        self.add_user(text)
+    def send_prompt(self, content: str | list[Block]) -> None:
+        self.add_user(content)
         # 用户消息正下方立即出现转圈指示器（不等模型首包）
         self._mount_thinking_indicator()
         self.busy = True
         self.set_status("thinking")
-        self.run_worker(self._agent_worker(text), group="agent", exclusive=True)
+        self.run_worker(self._agent_worker(content), group="agent", exclusive=True)
 
     def _start_initial_prompt(self) -> None:
         if not self._pending_initial:
             return
         self._pending_initial = False
-        prompt = (self.initial_prompt or "").strip()
+        initial = self.initial_prompt
+        if isinstance(initial, list):
+            # 命令行 --image/--file 传入的内容块，直接作为一条带附件的消息。
+            if initial:
+                self.handle_submit(initial)
+            return
+        prompt = (initial or "").strip()
         if prompt:
             self.handle_submit(prompt)
 
-    async def _agent_worker(self, prompt: str) -> None:
+    async def _agent_worker(self, prompt: str | list[Block]) -> None:
         try:
             await self.agent.run(prompt)
         except asyncio.CancelledError:
@@ -1006,15 +1029,21 @@ class YotCodeApp(App[None]):
                     block.text for block in message.content
                     if isinstance(block, TextBlock) and block.text.strip()
                 ]
-                if not texts:
-                    continue
+                # 保留图片附件块，恢复会话后仍能看到用户当时发的图。
+                image_blocks = [b for b in message.content if isinstance(b, ImageBlock)]
                 text = "\n".join(texts)
                 if text.startswith("<hook-context>") or text.startswith("<referenced-files>"):
                     continue
                 if text.startswith("This session is being continued"):
                     self.add_notice("Resumed from a compaction summary.", "info")
                     continue
-                self.transcript().mount(UserMessage(text))
+                # 构造要显示的内容：文本块 + 图片块（UserMessage 已支持块列表）。
+                display: str | list[Block] = (
+                    [TextBlock(text), *image_blocks] if image_blocks else text
+                )
+                if not text and not image_blocks:
+                    continue
+                self.transcript().mount(UserMessage(display))
                 continue
             for block in message.content:
                 if isinstance(block, TextBlock) and block.text.strip():

@@ -638,13 +638,90 @@ yot -p --output-format json "列出当前目录的文件"
 yot [prompt]                  # 交互 TUI（可带初始 prompt）
 yot -p "explain this repo"    # 无头模式：打印结果后退出
 yot --continue                # 继续最近的会话
-yot --resume <session-id>     # 恢复指定会话
+yot --resume                  # 弹出会话选择器（不带 id 时，类似 claude -r）
+yot --resume <session-id>     # 按 id 精确恢复指定会话
+yot --image shot.png -p "解释这张图"  # 附加图片（可重复传）
+yot --file main.py -p "审查这个文件"  # 附加文本文件（可重复传）
 yot --permission-mode acceptEdits
 yot --mock                    # 离线演示，无需 Key
 yot --setup-path              # 把命令目录加入用户 PATH（解决"找不到命令"）
 yot --setup                   # 打印首次配置指引 + 生成全注释模板
 yot --version
 ```
+
+### 发送图片和文件给大模型
+
+除了文字，你还可以把截图、图片和文件一起发给模型。四种入口最终都会变成一条
+"带附件"的用户消息：
+
+| 入口 | 操作 | 适用场景 |
+| --- | --- | --- |
+| 命令行参数 | `yot -p "解释这张图" --image shot.png` | 无头模式 / 脚本 |
+| 剪贴板截图 | 输入框按 `Ctrl+Shift+V`（或 `Ctrl+Alt+V`） | 截图后直接发给模型 |
+| `@文件` 智能识别 | 输入 `@图片.png` 或 `@代码.py` | 在消息里引用文件 |
+| 粘贴 / 拖放路径 | 把文件路径粘贴或拖进输入框 | 从资源管理器复制文件 |
+
+**1. 命令行附加（`--image` / `--file`）**
+
+两个参数都可重复传多次，程序按扩展名自动分辨：图片（`png/jpg/jpeg/gif/webp/bmp/tif/tiff`）
+读成图片块，其他文件读成文本块：
+
+```bash
+yot -p "这两张图有什么区别？" --image before.png --image after.png
+yot -p "审查这个文件的改动" --file src/main.py
+yot --image shot.png          # 交互 TUI 里带着图片启动
+```
+
+**2. 剪贴板截图（`Ctrl+Shift+V`）**
+
+截图到剪贴板后，在输入框按 `Ctrl+Shift+V`（部分终端用 `Ctrl+Alt+V`）即可附加。
+终端里的普通 `Ctrl+V` 只会传文本、无法携带位图，所以使用独立按键。
+该功能依赖可选库 Pillow，未安装时会给出友好提示，不影响其他功能：
+
+```bash
+pip install Pillow            # 或 pip install -e ".[images]"
+```
+
+**3. `@文件` 智能识别**
+
+输入 `@` 后的补全方式和以前一样；发送时 Agent 按扩展名智能处理：
+
+- 图片：作为真正的图片发送，模型能"看到"画面内容；
+- 文本：沿用原来的 `<file>` 包装，提示词保持一致；
+- 其他二进制：给出"这是二进制文件"的说明文本，避免乱码。
+
+```text
+看看这张截图里哪里错了 @./screenshots/error.png
+参考一下这个模块 @yotcode/agent.py
+```
+
+**4. 粘贴 / 拖放文件路径**
+
+从文件管理器复制文件（或把文件拖进终端窗口），输入框会自动把路径识别成附件，
+不会把一长串路径文本发给模型。已附加的图片/文件显示为输入框下方的筹码，
+点击 `×` 可在发送前移除。
+
+**限制与提示**
+
+- 单个文件上限 5MB（与内置 `Read` 工具读图片一致），一次最多 10 个附件；
+- 文本附件超过 6 万字符会截断；
+- 当前模型不支持图片时会打印警告，仍会发送，由模型端决定如何响应；
+- 附件随会话一起存入 JSONL，恢复后仍可回放；
+- 图片以 base64 进入请求体，超大图片会增加 token 消耗与费用。
+
+### 恢复会话：`--resume` 选择器
+
+`--resume` 现在支持不带 id，体验类似 `claude -r`：
+
+```bash
+yot --resume                  # 弹出会话选择器，输入序号恢复
+yot --resume <session-id>     # 带 id 时按 id 精确恢复（可跨项目）
+yot --continue                # 直接继续当前目录最近的会话
+```
+
+不带 id 时，终端会列出当前目录的会话（日期、标题、轮数），输入序号回车确认。
+这样即使是几天前的会话也能从列表里找回来，而不再只能取最近一条。
+TUI 里按 `Ctrl+R` 或输入 `/resume` 打开的是图形化选择器，两者都可以使用。
 
 ## 功能特性
 
@@ -656,8 +733,10 @@ yot --version
 - **并发工具执行** — 只读工具和子代理可在同一轮并行运行，有副作用的工具保持严格顺序。
 - **权限控制** — `default`、`acceptEdits`、`plan`、`bypassPermissions` 四种模式；
   允许/询问/拒绝规则；`Shift+Tab` 切换模式。
+- **图片 / 文件附件** — `--image` / `--file` 命令行附加、剪贴板截图（`Ctrl+Shift+V`）、
+  `@图片` 智能识别、粘贴/拖放路径；附件显示为可移除筹码，随会话持久化并可在恢复后回放。
 - **会话管理** — 每轮对话以 JSONL 保存到 `~/.yotcode/projects/<slug>/`，支持
-  `/resume`、`--continue`、`--resume`、`--list-sessions`、`/export`。
+  `/resume`、`--continue`、`--resume`（不带 id 弹选择器）、`--list-sessions`、`/export`。
 - **上下文管理** — 达到上下文窗口 82% 时自动压缩；`/compact [指令]`。
 - **项目记忆** — `CLAUDE.md` / `YOTCODE.md`、父目录、`@imports`、`#笔记` 快捷写法。
 - **自定义斜杠命令** — `.yotcode/commands/*.md`。
@@ -681,6 +760,7 @@ yot --version
 | `Shift+Tab` | 切换权限模式 |
 | `Ctrl+P` | 命令面板 |
 | `Ctrl+R` | 恢复会话 |
+| `Ctrl+Shift+V` / `Ctrl+Alt+V` | 从剪贴板附加截图（需 Pillow） |
 | `Ctrl+O` | 展开 / 折叠工具输出 |
 | `Ctrl+L` | 清屏 |
 | `Ctrl+T` | 显示待办 |
@@ -723,6 +803,7 @@ yotcode/
   agent.py        agent 循环：流式、工具、权限、压缩、子代理
   cli.py          命令行入口 + 无头运行（含 --setup-path / --setup）
   config.py       配置合并、凭据、模型/provider 解析
+  attachments.py  图片/文件附件转换：路径/剪贴板 → 内容块，大小与类型校验
   setup.py        首次运行模板生成 + PATH 配置逻辑
   permissions.py  允许/询问/拒绝规则引擎
   session.py      JSONL 持久化、恢复、导出

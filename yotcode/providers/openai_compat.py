@@ -47,7 +47,12 @@ def _result_text(content: str | list[Any]) -> str:
         if isinstance(block, TextBlock):
             parts.append(block.text)
         elif isinstance(block, ImageBlock):
-            parts.append("[image omitted]")
+            # OpenAI 协议不允许在 role="tool" 消息里放图片，无法像 Anthropic
+            # 那样透传 base64。这里给出明确的占位说明（含文件名/类型），
+            # 让模型知道"这里本应有一张图"，而不是静默丢失、毫无提示。
+            name = getattr(block, "filename", None)
+            label = name or block.media_type
+            parts.append(f"[图片已省略：{label}；当前供应商不支持在工具结果中传图]")
     return "\n".join(parts) or "(empty)"
 
 

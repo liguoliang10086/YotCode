@@ -62,6 +62,9 @@ class ImageBlock:
     media_type: str
     data: str  # base64
     type: str = "image"
+    # 可选的文件名，仅用于 UI 筹码展示；不影响发给模型的协议内容。
+    # 放在 type 之后且给默认值，保证旧代码的位置参数构造不受影响。
+    filename: str | None = None
 
     def to_data_url(self) -> str:
         return f"data:{self.media_type};base64,{self.data}"
@@ -183,10 +186,14 @@ def block_to_dict(block: Block) -> dict[str, Any]:
             "is_error": block.is_error,
         }
     if isinstance(block, ImageBlock):
-        return {
+        out: dict[str, Any] = {
             "type": "image",
             "source": {"type": "base64", "media_type": block.media_type, "data": block.data},
         }
+        # 文件名是 UI 用的元数据，有就一起存，恢复会话后还能显示出来。
+        if block.filename:
+            out["filename"] = block.filename
+        return out
     raise TypeError(f"unknown block {block!r}")
 
 
@@ -213,7 +220,11 @@ def block_from_dict(data: dict[str, Any]) -> Block:
         )
     if kind == "image":
         source = data.get("source") or {}
-        return ImageBlock(source.get("media_type", "image/png"), source.get("data", ""))
+        return ImageBlock(
+            source.get("media_type", "image/png"),
+            source.get("data", ""),
+            filename=data.get("filename"),
+        )
     if kind == "image_url":  # tolerated for imported transcripts
         return TextBlock("[image]")
     return TextBlock(str(data))

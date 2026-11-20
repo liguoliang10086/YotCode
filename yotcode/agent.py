@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from .attachments import is_image_path, path_to_block
 from .checkpoints import CheckpointStore
 from .config import Config
 from .hooks import HookRunner
@@ -56,6 +57,8 @@ from .tools import (
 )
 from .tools.interaction import ExitPlanModeTool
 from .types import (
+    Block,
+    ImageBlock,
     Message,
     TextBlock,
     ThinkingBlock,
@@ -340,7 +343,7 @@ class Agent:
         }
 
     # -- main loop ---------------------------------------------------------
-    async def run(self, prompt: str | None = None, *, max_turns: int | None = None,
+    async def run(self, prompt: str | list[Block] | None = None, *, max_turns: int | None = None,
                   auto_compact: bool = True) -> str:
         """★ 整个项目最核心的方法：AI 助手的"思考-行动"主循环。
 
@@ -359,18 +362,33 @@ class Agent:
         最后跑 Stop 钩子并返回最后一段文字。
 
         参数说明：
-          prompt: 用户这句话；None 表示继续已有历史（比如 --continue）
+          prompt: 用户这句话。可以是纯文本 str，也可以是内容块列表 list[Block]
+                  （图片/文件附件）；None 表示继续已有历史（比如 --continue）
           max_turns: 最多循环多少轮，防止无限调用
           auto_compact: 是否自动压缩过长的历史
         """
         self.cancel.clear()                                  # 清掉上一次遗留的"取消"信号
         max_turns = max_turns or self.config.max_turns       # 没指定就用配置里的默认值
         if prompt is not None:
-            prompt = self.expand_mentions(prompt)
-            self._append_message(user_message(prompt))
+            # 统一展开 @mentions：文本附件仍是 <file> 包装，图片附件变成 ImageBlock。
+            # 无论入参是 str 还是 list[Block]，这里都归一成 list[Block]。
+            blocks = self.expand_mentions(prompt)
+            # 若消息里带图片，但当前供应商声明不支持图片，给出可读警告。
+            # 仍照常发送（由模型端决定如何响应），只是不让用户困惑"图怎么没反应"。
+            if any(isinstance(b, ImageBlock) for b in blocks):
+                if not getattr(self.provider, "supports_images", False):
+                    self.callbacks.on_notice(
+                        "当前模型供应商不支持图片输入，图片可能不会被理解。",
+                        "warning",
+                    )
+            self._append_message(user_message(blocks))
+            # hooks 的 prompt 字段要字符串：从块里抽出纯文本，避免把对象塞进 JSON。
+            hook_prompt = "\n".join(
+                b.text for b in blocks if isinstance(b, TextBlock)
+            )
             outcome = await self.hooks.run("UserPromptSubmit", {
                 "event": "UserPromptSubmit",
-                "prompt": prompt,
+                "prompt": hook_prompt,
                 "cwd": str(self.config.cwd),
                 "session_id": self.session.meta.id,
             })
@@ -820,16 +838,40 @@ class Agent:
         return True
 
     # -- prompt helpers ----------------------------------------------------
-    def expand_mentions(self, prompt: str) -> str:
+    def expand_mentions(self, prompt: str | list[Block]) -> list[Block]:
+        """把 @文件 引用展开成内容块（附件智能识别的单一事实来源）。
+
+        规则（与 UI 的 @补全共用同一套路径解析）：
+          * @图片.png / .jpg / ... -> ImageBlock（真正作为图片发给模型）
+          * @代码.py 等文本       -> 沿用 <file> 包装塞进 TextBlock
+          * 其他二进制文件        -> 一句说明性文本，避免把乱码塞进 prompt
+          * 已经是块（UI 传入的附件）-> 原样保留，不重复展开
+
+        返回 list[Block]：文本块在前，附件块在后。旧版返回 str，现在统一成块，
+        由 run() 交给 user_message()（它本就支持 list[Block]）。
+        """
         import re
 
+        # 1) 先把入参归一成块列表：str 转成一个 TextBlock；已有块原样保留。
+        if isinstance(prompt, str):
+            blocks: list[Block] = [TextBlock(prompt)]
+            text_indices = [0]
+        else:
+            blocks = list(prompt)
+            # 只展开 TextBlock 里的 @mention；ImageBlock 等附件保持不动。
+            text_indices = [i for i, b in enumerate(blocks) if isinstance(b, TextBlock)]
+
         pattern = re.compile(r"(?<![\w@])@([^\s@]+)")
-        attachments: list[tuple[str, str]] = []
-        seen: set[str] = set()
+        file_refs: list[tuple[str, str]] = []   # 文本文件：(token, 文本内容)
+        seen: set[str] = set()                   # 同一文件只处理一次
+        new_blocks: list[Block] = []             # 展开后的最终结果
+
+        # 引用计数：文本 + 图片合计不超过 5 个（沿用旧上限，防止请求体膨胀）。
+        use_attachments = self._attachments()
 
         def replace(match: re.Match[str]) -> str:
             token = match.group(1).rstrip(".,;:!?)\"'")
-            if "://" in token:
+            if "://" in token:                     # URL 不当作文件
                 return match.group(0)
             path = Path(token)
             if not path.is_absolute():
@@ -840,26 +882,51 @@ class Agent:
                 return match.group(0)
             if not path.is_file() or str(path) in seen:
                 return match.group(0)
-            seen.add(str(path))
-            if len(attachments) >= 5:
+            if len(file_refs) + len(use_attachments) >= 5:
                 return token
+            seen.add(str(path))
+
+            # 图片扩展名 -> 走附件模块转成 ImageBlock（含大小校验）。
+            if is_image_path(path):
+                block = path_to_block(path)
+                if isinstance(block, ImageBlock):
+                    use_attachments.append(block)
+                    return token
+
+            # 非图片：尝试按文本读取；读不出来就给一句说明，不塞乱码。
             try:
                 text, _, _ = read_text(path)
-            except OSError:
+            except (OSError, UnicodeError):
+                file_refs.append((token, f"[二进制文件，已跳过内容：{path.name}]"))
                 return token
             if len(text) > 60_000:
                 text = text[:60_000] + "\n... (truncated)"
-            attachments.append((token, text))
+            file_refs.append((token, text))
             return token
 
-        new_prompt = pattern.sub(replace, prompt)
-        if attachments:
-            blocks = [new_prompt, "", "<referenced-files>"]
-            for name, text in attachments:
-                blocks.append(f"<file path=\"{name}\">\n{text}\n</file>")
-            blocks.append("</referenced-files>")
-            return "\n".join(blocks)
-        return new_prompt
+        # 2) 逐块展开：TextBlock 做 @替换，其他块原样带上。
+        for index, block in enumerate(blocks):
+            if index in text_indices:
+                expanded = pattern.sub(replace, block.text)  # type: ignore[union-attr]
+                new_blocks.append(TextBlock(expanded))
+            else:
+                new_blocks.append(block)
+
+        # 3) 文本文件沿用 <referenced-files> 包装，保持提示词风格不变。
+        if file_refs:
+            wrapper = ["<referenced-files>"]
+            for name, text in file_refs:
+                wrapper.append(f'<file path="{name}">\n{text}\n</file>')
+            wrapper.append("</referenced-files>")
+            new_blocks.append(TextBlock("\n".join(wrapper)))
+
+        # 4) 图片附件放最后，交给 provider 转成真正的图片消息。
+        new_blocks.extend(use_attachments)
+        return new_blocks
+
+    def _attachments(self) -> list[Block]:
+        """返回可变的附件累加器占位（供 expand_mentions 内部收集图片块）。"""
+        return []
 
     def _api_messages(self) -> list[Message]:
         """Prune oversized old tool results before sending."""

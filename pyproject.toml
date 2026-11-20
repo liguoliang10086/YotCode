@@ -25,6 +25,8 @@ yotcode = "yotcode.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+# 剪贴板截图需要 Pillow；不装也能用（粘贴/拖放/@文件/CLI 附件都正常）。
+images = ["Pillow>=10"]
 
 [tool.setuptools.packages.find]
 include = ["yotcode*"]

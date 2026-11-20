@@ -191,11 +191,15 @@ def _usage_to_json(usage: Any) -> str:
 def _format_block_json(block: Any) -> str:
     """把内容块转成标准 JSON（双引号、true/false），完整保留所有内容不截断。"""
     if type(block).__name__ == "ImageBlock":
-        # 图片 base64 也完整写入（用户要求不截断）
-        return json.dumps({
+        # 图片 base64 也完整写入（用户要求不截断）；有文件名则一并记录。
+        payload = {
             "type": "image",
             "media_type": block.media_type,
             "data": block.data,
-        }, ensure_ascii=False)
+        }
+        filename = getattr(block, "filename", None)
+        if filename:
+            payload["filename"] = filename
+        return json.dumps(payload, ensure_ascii=False)
     data = block_to_dict(block)
     return json.dumps(data, ensure_ascii=False, indent=2)

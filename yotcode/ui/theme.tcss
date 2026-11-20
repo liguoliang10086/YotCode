@@ -95,6 +95,15 @@ MarkdownLink {
     height: auto;
     color: #a8a59f;   /* 柔和灰：视觉更轻，与助手正文区分层级 */
 }
+/* 用户消息里的附件占位标记（图片 / 文件）。 */
+.user-line {
+    height: auto;
+}
+.user-attachment {
+    width: 1fr;
+    height: auto;
+    color: #c08a6b;   /* 比正文略亮的强调色，标记为附件 */
+}
 .assistant-md {
     width: 1fr;
     height: auto;
@@ -231,6 +240,24 @@ MarkdownLink {
     margin: 1 2 0 2;
     background: transparent;
     padding: 0;
+}
+/* 待发送附件筹码条：位于输入框上方，每个附件一个可点击移除的小标签。 */
+#attachment-bar {
+    height: auto;
+    padding: 0 0 0 1;
+    margin: 0 0 1 0;
+}
+.attachment-chip {
+    height: 1;
+    width: auto;
+    padding: 0 1;
+    margin-right: 1;
+    background: #3a302a;
+    color: #d9a17f;
+    border: round #6b4b38;
+}
+.attachment-chip:hover {
+    background: #4a3a2f;
 }
 #prompt-row {
     height: auto;

@@ -31,6 +31,7 @@ from textual.widgets.option_list import Option
 
 from .. import __version__
 from ..config import Config
+from ..types import Block, ImageBlock, TextBlock
 from ..utils import display_path, format_duration, git_info
 from .render import (
     ACCENT,
@@ -159,19 +160,46 @@ class WelcomePanel(Static):
         )
 
 
-class UserMessage(Horizontal):
+class UserMessage(Vertical):
     """用户消息：`>` + 正文，正文自动换行并对齐到符号右侧。
 
     图标参考 Claude Code：用户输入用橙色右尖括号。
+    支持附件：若传入 list[Block]，图片/文件会以一行占位标签显示在正文下方，
+    让用户和模型都能看到"这条消息带了哪些附件"。终端 TUI 不渲染缩略图，
+    只显示 `[图片 name.png]` / `[文件 xxx]` 这样的标记。
     """
 
-    def __init__(self, text: str) -> None:
+    def __init__(self, content: str | list[Block]) -> None:
         super().__init__(classes="user-message")
-        self.text = text
+        # 兼容旧调用：传进来的是 str，转成 TextBlock 统一处理。
+        self.blocks: list[Block] = (
+            [TextBlock(content)] if isinstance(content, str) else list(content)
+        )
 
     def compose(self) -> ComposeResult:
-        yield Static(">", classes="msg-bullet user-bullet", markup=False)
-        yield Static(Text(self.text, style=TEXT), classes="user-text", markup=False)
+        from ..attachments import describe_block  # 延迟导入，避免循环依赖
+
+        # 正文：`>` 图标 + 所有文本块拼接。
+        text_parts = [b.text for b in self.blocks if isinstance(b, TextBlock)]
+        text = "\n".join(part for part in text_parts if part)
+        with Horizontal(classes="user-line"):
+            yield Static(">", classes="msg-bullet user-bullet", markup=False)
+            yield Static(Text(text, style=TEXT), classes="user-text", markup=False)
+        # 附件：图片 / 文件各占一行占位标记。
+        for block in self.blocks:
+            if isinstance(block, ImageBlock):
+                name = getattr(block, "filename", None) or block.media_type
+                yield Static(
+                    Text(f"  [图片] {name}", style=ACCENT_SOFT),
+                    classes="user-attachment",
+                    markup=False,
+                )
+            elif not isinstance(block, TextBlock):
+                yield Static(
+                    Text(f"  {describe_block(block)}", style=DIM),
+                    classes="user-attachment",
+                    markup=False,
+                )
 
 
 class AssistantMessage(Horizontal):
@@ -646,6 +674,14 @@ class PromptTextArea(TextArea):
     async def _on_key(self, event: events.Key) -> None:
         key = event.key
         owner = self.owner
+        # Ctrl+Shift+V：从系统剪贴板读取截图，作为图片附件发送。
+        # 终端里的普通 Ctrl+V 只会传来文本，无法携带位图，所以必须用独立按键。
+        if key in ("ctrl+shift+v", "ctrl+alt+v"):
+            event.stop()
+            event.prevent_default()
+            if owner is not None:
+                owner.attach_clipboard_image()
+            return
         # 空输入时按 ? 打开帮助；有内容时正常输入问号。
         if key in ("question_mark", "?") and not self.text.strip():
             event.stop()
@@ -676,6 +712,27 @@ class PromptTextArea(TextArea):
             return
         await super()._on_key(event)
 
+    async def _on_paste(self, event: events.Paste) -> None:
+        """粘贴文本：若内容是文件路径（资源管理器复制文件或拖放后的路径），
+        自动识别成附件；否则走 TextArea 默认行为，把文本插进输入框。
+
+        这样覆盖用户说的"拖放/粘贴文件路径自动识别为附件"场景——终端本身
+        不支持真正的拖放二进制数据，但拖放到输入框最终会变成一段路径文本。
+        """
+        owner = self.owner
+        candidates = None
+        if owner is not None and event.text:
+            from ..attachments import attachment_candidates
+            candidates = attachment_candidates(event.text, owner.yot.config.cwd)
+        if candidates:
+            # 粘贴的是文件路径：转成附件，不再把路径文本塞进输入框。
+            event.stop()
+            event.prevent_default()
+            owner.add_attachments(candidates)
+            owner.yot.notify(f"已附加 {len(candidates)} 个文件", severity="information")
+            return
+        await super()._on_paste(event)
+
     def action_cursor_up(self, select: bool = False) -> None:  # type: ignore[override]
         if not select and self.cursor_location[0] == 0 and self.owner is not None:
             if self.owner.navigate_up():
@@ -698,6 +755,9 @@ class PromptArea(Vertical):
         self.history_pos = 0
         self._suppress = False
         self._completion_token: tuple[int, int, str] | None = None
+        # 待发送附件列表：图片 ImageBlock / 文件 TextBlock，发送前展示成筹码。
+        self.attachments: list[Block] = []
+        self.attachment_bar = Horizontal(id="attachment-bar")
         self.chevron = Static("> ", id="prompt-chevron", markup=False)
         self.prompt = PromptTextArea(
             soft_wrap=True, show_line_numbers=False, tab_behavior="focus",
@@ -723,6 +783,7 @@ class PromptArea(Vertical):
 
     def compose(self) -> ComposeResult:
         yield self.completions
+        yield self.attachment_bar
         with Horizontal(id="prompt-row"):
             yield self.chevron
             yield self.prompt
@@ -730,6 +791,7 @@ class PromptArea(Vertical):
 
     def on_mount(self) -> None:
         self.completions.display = False
+        self.attachment_bar.display = False
         self.set_mode(self.yot.config.permission_mode)
         # 首帧布局可能改变输入框位置/高度，等布局稳定后再设置焦点与高度，
         # 避免光标落在旧坐标上（“输入框和输入焦点错位”）。
@@ -758,16 +820,81 @@ class PromptArea(Vertical):
         self.chevron.update(prefixes.get(mode, "> "))
         self.chevron.styles.color = colors.get(mode, ACCENT)
 
+    # -- attachments -------------------------------------------------------
+    def add_attachments(self, blocks: list[Block]) -> None:
+        """把附件加入待发送列表并刷新筹码条。超过上限时提示并截断。"""
+        from ..attachments import describe_block  # 延迟导入，避免循环依赖
+
+        if not blocks:
+            return
+        room = max(0, 10 - len(self.attachments))
+        added = blocks[:room]
+        self.attachments.extend(added)
+        if len(blocks) > room:
+            self.yot.notify("一次最多附加 10 个文件，其余已忽略", severity="warning")
+        # 重建筹码条：每个附件一个可点击移除的标签。
+        self.attachment_bar.remove_children()
+        for index, block in enumerate(self.attachments):
+            chip = Static(
+                Text(f" {describe_block(block)}  ×", style=ACCENT_SOFT),
+                classes="attachment-chip",
+                markup=False,
+            )
+            # 用闭包记住索引，点击时移除对应附件。
+            chip.index = index  # type: ignore[attr-defined]
+            self.attachment_bar.mount(chip)
+        self.attachment_bar.display = bool(self.attachments)
+        self.yot.call_after_refresh(self._update_height)
+
+    def on_click(self, event: events.Click) -> None:
+        """点击附件筹码 × 移除该附件。"""
+        target = event.target
+        index = getattr(target, "index", None)
+        if index is not None and "attachment-chip" in (target.classes or ()):
+            event.stop()
+            self.remove_attachment(int(index))
+
+    def remove_attachment(self, index: int) -> None:
+        if 0 <= index < len(self.attachments):
+            self.attachments.pop(index)
+            # 索引变了，整体重建筹码条。
+            current = list(self.attachments)
+            self.attachments = []
+            self.add_attachments(current)
+
+    def attach_clipboard_image(self) -> None:
+        """读取系统剪贴板截图作为图片附件（Pillow 可选依赖）。"""
+        from ..attachments import clipboard_image_block
+        block = clipboard_image_block()
+        if block is None:
+            self.yot.notify(
+                "剪贴板中没有图片，或未安装 Pillow（pip install Pillow）",
+                severity="warning",
+            )
+            return
+        self.add_attachments([block])
+        self.yot.notify("已从剪贴板附加图片", severity="information")
+
     # -- submission / history ---------------------------------------------
     def submit(self) -> None:
+        from ..attachments import merge_prompt_blocks
         text = self.prompt.text.strip()
-        if not text:
+        if not text and not self.attachments:
             return
+        # 把文字和附件合并成内容块一起发出；没有附件时仍是单 TextBlock，
+        # 旧的处理逻辑（! / # / 命令前缀）在 handle_submit 里照常工作。
+        content: str | list[Block] = (
+            merge_prompt_blocks(text, list(self.attachments))
+            if self.attachments else text
+        )
         self.history.append(text)
         self.history_pos = len(self.history)
         self.prompt.clear()
+        self.attachments.clear()
+        self.attachment_bar.remove_children()
+        self.attachment_bar.display = False
         self._hide_completions()
-        self.yot.handle_submit(text)
+        self.yot.handle_submit(content)
 
     def navigate_up(self) -> bool:
         if self.completions.display and self.completions.option_count:

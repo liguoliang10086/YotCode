@@ -40,6 +40,7 @@ from .providers import create_provider
 from .providers.base import Provider
 from .session import Session
 from .tools import create_tools
+from .types import Block
 from .utils import configure_stdio, format_duration, human_tokens
 
 console = Console(highlight=False)
@@ -274,6 +275,45 @@ def resume_session(
     return session, None
 
 
+def pick_session_interactive(cwd: Path) -> tuple[Session | None, str | None]:
+    """--resume 不带 id 时：列出会话让用户选一个（文本式选择器）。
+
+    类似 `claude -r`：打印带序号的会话列表，读入用户输入的序号确认。
+    无 TTY（管道 / CI）时读取 stdin，读不到就返回提示，绝不挂起。
+    """
+    from .utils import slug_path
+
+    directory = home_dir() / "projects" / slug_path(cwd)
+    metas = Session.list_sessions(directory)
+    if not metas:
+        return None, "No previous sessions found for this directory."
+
+    # 打印列表：序号 / 日期 / 轮数 / 标题，最多 30 条（与 --list-sessions 一致）。
+    lines = []
+    for index, meta in enumerate(metas[:30], start=1):
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(meta.updated))
+        title = meta.title or "(untitled)"
+        lines.append(f"  {index:>2}. {when}  {meta.turns:>2} turns  {title}")
+    console.print(
+        Panel("\n".join(lines), title="选择要恢复的会话 / Select a session", border_style="cyan")
+    )
+    console.print("输入序号回车确认，直接回车取消：", style="dim")
+
+    try:
+        answer = sys.stdin.readline().strip()
+    except (OSError, KeyboardInterrupt):
+        return None, None
+    if not answer:
+        return None, None
+    if not answer.isdigit():
+        return None, f"Invalid selection: {answer}"
+    index = int(answer) - 1
+    if not (0 <= index < len(metas[:30])):
+        return None, f"Selection out of range: {answer}"
+    chosen = metas[index]
+    return Session.load(directory, chosen.id), None
+
+
 def print_sessions(cwd: Path) -> None:
     from .utils import slug_path
 
@@ -363,7 +403,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         const="",
         default=None,
-        help="Resume a session by id (latest if omitted).",
+        help="Resume a session by id (open a picker if id omitted).",
     )
     parser.add_argument("--session", help="Load a specific session id.")
     parser.add_argument(
@@ -392,6 +432,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--append-system-prompt", help="Append to the system prompt.")
     parser.add_argument("--api-key", help="API key (overrides environment).")
     parser.add_argument("--base-url", help="API base URL.")
+    # 无头模式附加文件：图片走 ImageBlock，其他文件读成文本块。可重复传多个。
+    parser.add_argument(
+        "--image",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="Attach an image file (repeatable). Sent to the model as an image block.",
+    )
+    parser.add_argument(
+        "--file",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="Attach a text file (repeatable). Read and inlined into the prompt.",
+    )
     parser.add_argument(
         "--mock",
         action="store_true",
@@ -430,7 +485,10 @@ def _flatten(values: list[str]) -> list[str]:
 # headless runner
 # --------------------------------------------------------------------------
 async def run_headless(
-    config: Config, prompt_text: str, session: Session | None, args: argparse.Namespace
+    config: Config,
+    prompt: str | list[Block],
+    session: Session | None,
+    args: argparse.Namespace,
 ) -> int:
     provider: Provider = create_provider(config)
     callbacks = PrintCallbacks(
@@ -449,7 +507,7 @@ async def run_headless(
         agent.add_tools(await manager.connect_all(callbacks.on_notice))
     started = time.time()
     try:
-        result = await agent.run(prompt_text, max_turns=args.max_turns)
+        result = await agent.run(prompt, max_turns=args.max_turns)
     except KeyboardInterrupt:
         result = "".join(callbacks.text_parts)
     finally:
@@ -602,7 +660,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.session:
         session, resume_error = resume_session(cwd, args.session)
     elif args.resume is not None:
-        session, resume_error = resume_session(cwd, args.resume or None)
+        if args.resume:
+            # 带 id：按 id 精确恢复（可跨项目）。
+            session, resume_error = resume_session(cwd, args.resume)
+        else:
+            # 不带 id：弹出文本式会话选择器，而不是直接取最近一条。
+            session, resume_error = pick_session_interactive(cwd)
     elif args.continue_session:
         session, resume_error = resume_session(cwd, None)
     if resume_error:
@@ -631,18 +694,29 @@ def main(argv: list[str] | None = None) -> int:
                     expand_custom_command(custom[name], cmd_args, config)
                 )
 
+    # 把 --image / --file 指定的附件转成内容块，与提示词文字合并。
+    # 没有附件时 prompt 仍是纯 str，保持旧行为完全不变。
+    from .attachments import merge_prompt_blocks, paths_to_blocks
+
+    attachment_paths: list[str] = list(args.image) + list(args.file)
+    prompt: str | list[Block] = prompt_text
+    if attachment_paths:
+        # --image 和 --file 都走统一转换：按扩展名自动分辨图片 / 文本。
+        attached = paths_to_blocks(attachment_paths, cwd)
+        prompt = merge_prompt_blocks(prompt_text, attached)
+
     if headless:
-        # 无头模式：没有提示词就没法工作，报个错直接退出
-        if not prompt_text:
+        # 无头模式：没有提示词、也没有附件就没法工作，报错退出。
+        if not prompt_text and not attachment_paths:
             err_console.print(
-                "Not a terminal (or -p was given). Provide a prompt: "
+                "Not a terminal (or -p was given). Provide a prompt or --image/--file: "
                 '`yot -p "your prompt"`.',
                 style="red",
             )
             return 1
         try:
             # asyncio.run 启动异步世界，运行 run_headless（最终调用 Agent.run）
-            return asyncio.run(run_headless(config, prompt_text, session, args))
+            return asyncio.run(run_headless(config, prompt, session, args))
         except KeyboardInterrupt:
             return 130  # 130 是 Unix 约定：被 Ctrl+C 中断
 
@@ -658,7 +732,8 @@ def main(argv: list[str] | None = None) -> int:
         # 字号来自 config.font_size（.env 的 YOTCODE_FONT_SIZE 或
         # settings.json 的 ui.fontSize），没配置时用程序默认值。
         prepare_console(config.font_size)
-        app = YotCodeApp(config, initial_prompt=prompt_text or None, session=session)
+        # prompt 可能是带附件的内容块列表（--image/--file），TUI 已支持。
+        app = YotCodeApp(config, initial_prompt=prompt or None, session=session)
         app.run()
     except KeyboardInterrupt:
         return 130
